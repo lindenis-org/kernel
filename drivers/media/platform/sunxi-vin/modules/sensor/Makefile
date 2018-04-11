@@ -14,4 +14,5 @@ obj-$(CONFIG_SENSOR_IMX326_MIPI)			+= imx326_mipi.o
 obj-$(CONFIG_SENSOR_OS08A10_MIPI)			+= os08a10_mipi.o
 obj-$(CONFIG_SENSOR_OV12895_MIPI)			+= ov12895_mipi.o
 obj-$(CONFIG_SENSOR_IMX477_MIPI)			+= imx477_mipi.o
+obj-$(CONFIG_SENSOR_IMX385_MIPI)			+= imx385_mipi.o
 

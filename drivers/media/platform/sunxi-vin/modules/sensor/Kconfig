@@ -58,6 +58,10 @@ config SENSOR_IMX477_MIPI
 	tristate "imx477_mipi sensor driver"
 	default n
 
+config SENSOR_IMX385_MIPI
+	tristate "imx385_mipi sensor driver"
+	default n
+
 menuconfig IMX317_PLATFORM
 	bool  "imx317 platform select"
 	default n
