@@ -39,6 +39,23 @@
 				allwinner,pull = <1>;
 			};
 
+			twi4_pins_a: twi4@0 {
+				allwinner,pins = "PL8", "PL9";
+				allwinner,pname = "twi4_scl", "twi4_sda";
+				allwinner,function = "s_twi1";
+				allwinner,muxsel = <2>;
+				allwinner,drive = <1>;
+				allwinner,pull = <0>;
+			};
+
+			twi4_pins_b: twi4@1 {
+				allwinner,pins = "PL8", "PL9";
+				allwainner,function = "io_disabled";
+				allwinner,muxsel = <7>;
+				allwinner,drive = <1>;
+				allwinner,pull = <0>;
+			};
+
 			s_jtag0_pins_a: s_jtag0@0 {
 				allwinner,pins = "PL4", "PL5", "PL6", "PL7";
 				allwinner,function = "s_jtag0";

@@ -171,6 +171,7 @@ struct inv_mpu6050_state {
 
 #define INV_MPU6050_REG_FIFO_COUNT_H        0x72
 #define INV_MPU6050_REG_FIFO_R_W            0x74
+#define INV_MPU6050_REG_WHO_AM_I            0x75
 
 #define INV_MPU6050_BYTES_PER_3AXIS_SENSOR   6
 #define INV_MPU6050_FIFO_COUNT_BYTE          2
@@ -201,6 +202,8 @@ struct inv_mpu6050_state {
 #define INV_MPU6050_MIN_FIFO_RATE            4
 #define INV_MPU6050_ONE_K_HZ                 1000
 #define INV_MPU6050_8K_HZ                 8000
+
+#define INV_MPU6050_CHIP_ID		0x98
 
 /* #define POLL_WORK */
 

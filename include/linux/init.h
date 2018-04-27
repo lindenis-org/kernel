@@ -215,10 +215,11 @@ extern bool initcall_debug;
 #define fs_initcall(fn)			__define_initcall(fn, 5)
 #define fs_initcall_sync(fn)		__define_initcall(fn, 5s)
 #define rootfs_initcall(fn)		__define_initcall(fn, rootfs)
-#define device_initcall(fn)		__define_initcall(fn, 6)
-#define device_initcall_sync(fn)	__define_initcall(fn, 6s)
-#define late_initcall(fn)		__define_initcall(fn, 7)
-#define late_initcall_sync(fn)		__define_initcall(fn, 7s)
+#define device_paralell_initcall(fn)	__define_initcall(fn, 6)
+#define device_initcall(fn)		__define_initcall(fn, 7)
+#define device_initcall_sync(fn)	__define_initcall(fn, 7s)
+#define late_initcall(fn)		__define_initcall(fn, 8)
+#define late_initcall_sync(fn)		__define_initcall(fn, 8s)
 
 #define __initcall(fn) device_initcall(fn)
 

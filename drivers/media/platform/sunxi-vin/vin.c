@@ -58,6 +58,8 @@ char act_name[I2C_NAME_SIZE] = "";
 uint act_slave = 0xff;
 uint use_sensor_list = 0xff;
 uint vin_i2c_dbg;
+uint ptn_on_cnt;
+extern uint ptn_frame_cnt;
 
 module_param_string(ccm, ccm, sizeof(ccm), S_IRUGO | S_IWUSR);
 module_param(i2c_addr, uint, S_IRUGO | S_IWUSR);
@@ -482,8 +484,6 @@ static int vin_pipeline_s_power(struct vin_pipeline *p, bool on)
 		unsigned int idx = seq[on][i];
 		if (!p->sd[idx] || !p->sd[idx]->entity.parent)
 			continue;
-		if (vin_cap->vinc->ptn_cfg.ptn_en && (idx <= VIN_IND_MIPI))
-			continue;
 		mutex_lock(&p->sd[idx]->entity.parent->graph_mutex);
 		ret = __vin_subdev_set_power(p->sd[idx], on);
 		mutex_unlock(&p->sd[idx]->entity.parent->graph_mutex);
@@ -495,8 +495,6 @@ error:
 	for (; i >= 0; i--) {
 		unsigned int idx = seq[on][i];
 		if (!p->sd[idx] || !p->sd[idx]->entity.parent)
-			continue;
-		if (vin_cap->vinc->ptn_cfg.ptn_en && (idx <= VIN_IND_MIPI))
 			continue;
 		mutex_lock(&p->sd[idx]->entity.parent->graph_mutex);
 		__vin_subdev_set_power(p->sd[idx], !on);
@@ -640,8 +638,18 @@ static int __vin_pipeline_s_stream(struct vin_pipeline *p, int on_idx)
 		}
 		usleep_range(100, 120);
 	}
-	if (vin_cap->vinc->ptn_cfg.ptn_en)
-		csic_ptn_generation_en(vind->id, on);
+	if (vin_cap->vinc->ptn_cfg.ptn_en) {
+		if (vin_cap->vinc->ptn_cfg.ptn_type > 0) {
+			ptn_on_cnt++;
+			if (ptn_on_cnt%vin_cap->vinc->ptn_cfg.ptn_type == 0) {
+				ptn_on_cnt = 0;
+				ptn_frame_cnt = 0;
+				csic_ptn_generation_en(vind->id, on);
+			}
+		} else {
+			csic_ptn_generation_en(vind->id, on);
+		}
+	}
 
 	return 0;
 error:

@@ -641,6 +641,9 @@ static s32 axp_usb_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 	case POWER_SUPPLY_PROP_ONLINE:
+		chg_dev->usb_pc_charging = (((CHARGE_USB_20 == axp_usbcurflag)
+					|| (CHARGE_USB_30 == axp_usbcurflag))
+						&& (chg_dev->ext_valid));
 		val->intval = chg_dev->usb_pc_charging;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:

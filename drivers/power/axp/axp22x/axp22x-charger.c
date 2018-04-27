@@ -360,6 +360,8 @@ static int axp22x_charger_init(struct axp_dev *axp_dev)
 	struct axp_regmap *map = axp_dev->regmap;
 	int i, update_min_times[8] = {30, 60, 120, 164, 0, 5, 10, 20};
 
+	axp_regmap_read(map, AXP22X_CHARGE_CONTROL1, &val);
+
 	if (axp22x_config.pmu_init_chgend_rate == 10)
 		val &= ~(1 << 4);
 	else

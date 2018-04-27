@@ -54,8 +54,6 @@ module_param_named(transfer_debug, bus_transfer_dbg,
 #define SUNXI_I2C_SFAIL  -3  /* start fail */
 #define SUNXI_I2C_TFAIL  -4  /* stop  fail */
 
-static int twi_used_mask;
-
 /* I2C transfer status */
 enum {
 	I2C_XFER_IDLE    = 0x1,
@@ -337,11 +335,6 @@ static int sunxi_i2c_xfer_complete(struct sunxi_i2c *i2c, int code);
 static int
 sunxi_i2c_do_xfer(struct sunxi_i2c *i2c, struct i2c_msg *msgs, int num);
 
-static int twi_chan_is_enable(int _ch)
-{
-	return twi_used_mask & SUNXI_TWI_CHAN_MASK(_ch);
-}
-
 static int twi_select_gpio_state(struct pinctrl *pctrl, char *name, u32 no)
 {
 	int ret = 0;
@@ -366,9 +359,6 @@ static int twi_request_gpio(struct sunxi_i2c *i2c)
 {
 	I2C_DBG("Pinctrl init %d ... [%s]\n",
 			i2c->bus_num, i2c->adap.dev.parent->init_name);
-
-	if (!twi_chan_is_enable(i2c->bus_num))
-		return -1;
 
 	i2c->pctrl = devm_pinctrl_get(i2c->adap.dev.parent);
 	if (IS_ERR(i2c->pctrl)) {
@@ -395,7 +385,7 @@ static int twi_start(void __iomem *base_addr, int bus_num)
 	while ((twi_get_start(base_addr) == 1) && (--timeout))
 		;
 	if (timeout == 0) {
-		I2C_ERR("[i2c%d] START can't sendout!\n", bus_num);
+		I2C_ERR("[sunxi-i2c%d] START can't sendout!\n", bus_num);
 		return SUNXI_I2C_FAIL;
 	}
 
@@ -411,7 +401,7 @@ static int twi_restart(void __iomem *base_addr, int bus_num)
 	while ((twi_get_start(base_addr) == 1) && (--timeout))
 		;
 	if (timeout == 0) {
-		I2C_ERR("[i2c%d] Restart can't sendout!\n", bus_num);
+		I2C_ERR("[sunxi-i2c%d] Restart can't sendout!\n", bus_num);
 		return SUNXI_I2C_FAIL;
 	}
 
@@ -429,7 +419,7 @@ static int twi_stop(void __iomem *base_addr, int bus_num)
 	while ((twi_get_stop(base_addr) == 1) && (--timeout))
 		;
 	if (timeout == 0) {
-		I2C_ERR("[i2c%d] STOP can't sendout!\n", bus_num);
+		I2C_ERR("[sunxi-i2c%d] STOP can't sendout!\n", bus_num);
 		return SUNXI_I2C_TFAIL;
 	}
 
@@ -438,7 +428,7 @@ static int twi_stop(void __iomem *base_addr, int bus_num)
 		&& (--timeout))
 		;
 	if (timeout == 0) {
-		I2C_ERR("[i2c%d] i2c state(0x%08x) isn't idle(0xf8)\n",
+		I2C_ERR("[sunxi-i2c%d] i2c state(0x%08x) isn't idle(0xf8)\n",
 				bus_num, readl(base_addr + TWI_STAT_REG));
 		return SUNXI_I2C_TFAIL;
 	}
@@ -450,7 +440,7 @@ static int twi_stop(void __iomem *base_addr, int bus_num)
 		;
 
 	if (timeout == 0) {
-		I2C_ERR("[i2c%d] i2c lcr(0x%08x) isn't idle(0x3a)\n",
+		I2C_ERR("[sunxi-i2c%d] i2c lcr(0x%08x) isn't idle(0x3a)\n",
 				bus_num, readl(base_addr + TWI_LCR_REG));
 		return SUNXI_I2C_TFAIL;
 	}
@@ -539,7 +529,7 @@ static int twi_send_clk_9pulse(void __iomem *base_addr, int bus_num)
 		twi_disable_lcr(base_addr, twi_scl);
 		status =  SUNXI_I2C_OK;
 	} else {
-		I2C_ERR("[i2c%d] SDA is still Stuck Low, failed.\n", bus_num);
+		I2C_ERR("[sunxi-i2c%d] SDA is still Stuck Low, failed.\n", bus_num);
 		twi_disable_lcr(base_addr, twi_scl);
 		status =  SUNXI_I2C_FAIL;
 	}
@@ -1053,19 +1043,19 @@ static int sunxi_i2c_hw_init(struct sunxi_i2c *i2c,
 
 	ret = twi_regulator_request(pdata);
 	if (ret < 0) {
-		I2C_ERR("[i2c%d] request regulator failed!\n", i2c->bus_num);
+		I2C_ERR("[sunxi-i2c%d] request regulator failed!\n", i2c->bus_num);
 		return -1;
 	}
 	twi_regulator_enable(pdata);
 
 	ret = twi_request_gpio(i2c);
 	if (ret < 0) {
-		I2C_ERR("[i2c%d] request i2c gpio failed!\n", i2c->bus_num);
+		I2C_ERR("[sunxi-i2c%d] request i2c gpio failed!\n", i2c->bus_num);
 		return -1;
 	}
 
 	if (sunxi_i2c_clk_init(i2c)) {
-		I2C_ERR("[i2c%d] init i2c clock failed!\n", i2c->bus_num);
+		I2C_ERR("[sunxi-i2c%d] init i2c clock failed!\n", i2c->bus_num);
 		return -1;
 	}
 
@@ -1190,13 +1180,12 @@ static int sunxi_i2c_probe(struct platform_device *pdev)
 	}
 	pdev->dev.platform_data = pdata;
 
-	pdev->id = of_alias_get_id(np, "twi");
-	if (pdev->id < 0) {
+	pdata->bus_num = of_alias_get_id(np, "twi");
+	if (pdata->bus_num < 0) {
 		I2C_ERR("I2C failed to get alias id\n");
 		ret = -EINVAL;
 		goto emem;
 	}
-	pdata->bus_num  = pdev->id;
 
 	mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (mem_res == NULL) {
@@ -1234,7 +1223,7 @@ static int sunxi_i2c_probe(struct platform_device *pdev)
 
 	pdev->dev.release = sunxi_i2c_release;
 	i2c->adap.owner   = THIS_MODULE;
-	i2c->adap.nr      = pdata->bus_num;
+	i2c->adap.nr      = pdata->bus_num;;
 	i2c->adap.retries = 3;
 	i2c->adap.timeout = 5*HZ;
 	i2c->adap.class   = I2C_CLASS_HWMON | I2C_CLASS_SPD;
@@ -1267,14 +1256,13 @@ static int sunxi_i2c_probe(struct platform_device *pdev)
 	ret = request_irq(irq, sunxi_i2c_handler, int_flag,
 					i2c->adap.name, i2c);
 	if (ret) {
-		I2C_ERR("[i2c%d] requeset irq failed!\n", i2c->bus_num);
+		I2C_ERR("[sunxi-i2c%d] requeset irq failed!\n", i2c->bus_num);
 		goto ereqirq;
 	}
 
 	i2c->adap.algo_data  = i2c;
 	i2c->adap.dev.parent = &pdev->dev;
 	i2c->adap.dev.of_node = pdev->dev.of_node;
-	twi_used_mask |= SUNXI_TWI_CHAN_MASK(pdev->id);
 
 	if (sunxi_i2c_hw_init(i2c, pdata)) {
 		ret = -EIO;
@@ -1283,7 +1271,7 @@ static int sunxi_i2c_probe(struct platform_device *pdev)
 
 	ret = i2c_add_numbered_adapter(&i2c->adap);
 	if (ret < 0) {
-		I2C_ERR("[i2c%d] failed to add adapter\n", i2c->bus_num);
+		I2C_ERR("[sunxi-i2c%d] failed to add adapter\n", i2c->bus_num);
 		goto eadapt;
 	}
 
@@ -1334,7 +1322,7 @@ static int sunxi_i2c_remove(struct platform_device *pdev)
 {
 	struct sunxi_i2c *i2c = platform_get_drvdata(pdev);
 
-	I2C_DBG("[i2c.%d] remove ...\n", i2c->bus_num);
+	I2C_DBG("[sunxi-i2c.%d] remove ...\n", i2c->bus_num);
 
 	platform_set_drvdata(pdev, NULL);
 	i2c_del_adapter(&i2c->adap);
@@ -1381,7 +1369,7 @@ static int sunxi_i2c_suspend(struct device *dev)
 	i2c->suspended = 1;
 
 	if (sunxi_i2c_clk_exit(i2c)) {
-		I2C_ERR("[i2c%d] suspend failed..\n", i2c->bus_num);
+		I2C_ERR("[sunxi-i2c%d] suspend failed..\n", i2c->bus_num);
 		i2c->suspended = 0;
 		return -1;
 	}
@@ -1389,7 +1377,7 @@ static int sunxi_i2c_suspend(struct device *dev)
 	twi_select_gpio_state(i2c->pctrl, PINCTRL_STATE_SLEEP, i2c->bus_num);
 	twi_regulator_disable(dev->platform_data);
 
-	I2C_DBG("[i2c%d] suspend okay..\n", i2c->bus_num);
+	I2C_DBG("[sunxi-i2c%d] suspend okay..\n", i2c->bus_num);
 	return 0;
 }
 
@@ -1410,13 +1398,13 @@ static int sunxi_i2c_resume(struct device *dev)
 	twi_select_gpio_state(i2c->pctrl, PINCTRL_STATE_DEFAULT, i2c->bus_num);
 
 	if (sunxi_i2c_clk_init(i2c)) {
-		I2C_ERR("[i2c%d] resume failed..\n", i2c->bus_num);
+		I2C_ERR("[sunxi-i2c%d] resume failed..\n", i2c->bus_num);
 		return -1;
 	}
 
 	twi_soft_reset(i2c->base_addr);
 
-	I2C_DBG("[i2c%d] resume okay..\n", i2c->bus_num);
+	I2C_DBG("[sunxi-i2c%d] resume okay..\n", i2c->bus_num);
 	return 0;
 }
 

@@ -2036,7 +2036,7 @@ static void __exit sunxi_spi_exit(void)
 	platform_driver_unregister(&sunxi_spi_driver);
 }
 
-module_init(sunxi_spi_init);
+device_paralell_initcall(sunxi_spi_init);
 module_exit(sunxi_spi_exit);
 
 MODULE_AUTHOR("pannan");

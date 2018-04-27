@@ -204,6 +204,9 @@ struct vin_pattern_config {
 	__u32 ptn_type;
 };
 
+struct vin_reset_time {
+	__u32 reset_time;
+};
 
 #define VIDIOC_ISP_AE_STAT_REQ \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 1, struct isp_stat_buf)
@@ -227,6 +230,8 @@ struct vin_pattern_config {
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 10, struct isp_debug_mode)
 #define VIDIOC_VIN_PTN_CFG \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 11, struct vin_pattern_config)
+#define VIDIOC_VIN_RESET_TIME \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 12, struct vin_reset_time)
 
 /*
  * Events

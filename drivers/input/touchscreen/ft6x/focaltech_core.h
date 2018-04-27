@@ -137,7 +137,9 @@
 //#define	TOUCH_VIRTUAL_KEYS
 #define	MULTI_PROTOCOL_TYPE_B	 0
 #define	TS_MAX_FINGER		1
-#define	CONFIG_FT6X_MULTITOUCH  0
+
+/*configure this macro by meuconfig*/
+#define	CONFIG_FT6X_MULTITOUCH IS_ENABLED(FT6X_MULTITOUCH_TS)
 
 #define	FTS_PACKET_LENGTH		128
 

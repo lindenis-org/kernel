@@ -25,7 +25,7 @@
 #include "camera.h"
 #include "sensor_helper.h"
 
-MODULE_AUTHOR("lwj");
+MODULE_AUTHOR("zw");
 MODULE_DESCRIPTION("A low-level driver for pattern sensors");
 MODULE_LICENSE("GPL");
 
@@ -55,10 +55,6 @@ MODULE_LICENSE("GPL");
  */
 
 static struct regval_list sensor_default_regs[] = {
-
-};
-
-static struct regval_list sensor_1080p30_regs[] = {
 
 };
 
@@ -106,98 +102,16 @@ static int sensor_s_exp_gain(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int sensor_s_sw_stby(struct v4l2_subdev *sd, int on_off)
-{
-	return 0;
-}
-
 /*
  * Stuff that knows about the sensor.
  */
 static int sensor_power(struct v4l2_subdev *sd, int on)
 {
-	int ret = 0;
-
-	switch (on) {
-	case STBY_ON:
-		sensor_dbg("STBY_ON!\n");
-		cci_lock(sd);
-		ret = sensor_s_sw_stby(sd, STBY_ON);
-		if (ret < 0)
-			sensor_err("soft stby falied!\n");
-		usleep_range(1000, 1200);
-		cci_unlock(sd);
-		break;
-	case STBY_OFF:
-		sensor_dbg("STBY_OFF!\n");
-		cci_lock(sd);
-		usleep_range(1000, 1200);
-		ret = sensor_s_sw_stby(sd, STBY_OFF);
-		if (ret < 0)
-			sensor_err("soft stby off falied!\n");
-		cci_unlock(sd);
-		break;
-	case PWR_ON:
-		sensor_dbg("PWR_ON!\n");
-		cci_lock(sd);
-		vin_gpio_set_status(sd, PWDN, 1);
-		vin_gpio_set_status(sd, RESET, 1);
-		vin_gpio_set_status(sd, POWER_EN, 1);
-		vin_gpio_write(sd, RESET, CSI_GPIO_LOW);
-		vin_gpio_write(sd, PWDN, CSI_GPIO_LOW);
-		vin_gpio_write(sd, POWER_EN, CSI_GPIO_HIGH);
-		vin_set_pmu_channel(sd, IOVDD, ON);
-		usleep_range(2000, 2200);
-		vin_set_pmu_channel(sd, DVDD, ON);
-		vin_set_pmu_channel(sd, AVDD, ON);
-		vin_gpio_write(sd, RESET, CSI_GPIO_HIGH);
-		vin_gpio_write(sd, PWDN, CSI_GPIO_HIGH);
-		usleep_range(100, 120);
-		vin_set_mclk(sd, ON);
-		usleep_range(100, 120);
-		vin_set_mclk_freq(sd, MCLK);
-		usleep_range(3000, 3200);
-		cci_unlock(sd);
-		break;
-	case PWR_OFF:
-		sensor_dbg("PWR_OFF!\n");
-		cci_lock(sd);
-		vin_gpio_set_status(sd, PWDN, 1);
-		vin_gpio_set_status(sd, RESET, 1);
-		vin_gpio_write(sd, RESET, CSI_GPIO_LOW);
-		vin_gpio_write(sd, PWDN, CSI_GPIO_LOW);
-		vin_set_mclk(sd, OFF);
-		vin_set_pmu_channel(sd, AFVDD, OFF);
-		vin_set_pmu_channel(sd, AVDD, OFF);
-		vin_set_pmu_channel(sd, IOVDD, OFF);
-		vin_set_pmu_channel(sd, DVDD, OFF);
-		vin_gpio_write(sd, POWER_EN, CSI_GPIO_LOW);
-		vin_gpio_set_status(sd, RESET, 0);
-		vin_gpio_set_status(sd, PWDN, 0);
-		vin_gpio_set_status(sd, POWER_EN, 0);
-		cci_unlock(sd);
-		break;
-	default:
-		return -EINVAL;
-	}
-
 	return 0;
 }
 
 static int sensor_reset(struct v4l2_subdev *sd, u32 val)
 {
-	switch (val) {
-	case 0:
-		vin_gpio_write(sd, RESET, CSI_GPIO_HIGH);
-		usleep_range(100, 120);
-		break;
-	case 1:
-		vin_gpio_write(sd, RESET, CSI_GPIO_LOW);
-		usleep_range(100, 120);
-		break;
-	default:
-		return -EINVAL;
-	}
 	return 0;
 }
 
@@ -284,14 +198,14 @@ static struct sensor_format_struct sensor_formats[] = {
  */
 
 static struct sensor_win_size sensor_win_sizes[] = {
-	{
-	 .width = 1920,
-	 .height = 1080,
+	 {
+	 .width = 4224,
+	 .height = 128,
 	 .hoffset = 0,
 	 .voffset = 0,
 	 .hts = 2288,
 	 .vts = 8400,
-	 .pclk = 576 * 1000 * 1000,
+	 .pclk = 288 * 1000 * 1000,
 	 .mipi_bps = 720 * 1000 * 1000,
 	 .fps_fixed = 30,
 	 .bin_factor = 1,
@@ -299,8 +213,179 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	 .intg_max = (4200 - 12) << 4,
 	 .gain_min = 1 << 4,
 	 .gain_max = 1440 << 4,
-	 .regs = sensor_1080p30_regs,
-	 .regs_size = ARRAY_SIZE(sensor_1080p30_regs),
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 3840,
+	 .height = 256,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 3264,
+	 .height = 256,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 2688,
+	 .height = 128,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 1920,
+	 .height = 1088,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 1920,
+	 .height = 1080,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	{
+	 .width = 1920,
+	 .height = 256,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 1920,
+	 .height = 128,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 1024,
+	 .height = 128,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
+	 .set_size = NULL,
+	 },
+	 {
+	 .width = 256,
+	 .height = 128,
+	 .hoffset = 0,
+	 .voffset = 0,
+	 .hts = 2288,
+	 .vts = 8400,
+	 .pclk = 288 * 1000 * 1000,
+	 .mipi_bps = 720 * 1000 * 1000,
+	 .fps_fixed = 30,
+	 .bin_factor = 1,
+	 .intg_min = 4 << 4,
+	 .intg_max = (4200 - 12) << 4,
+	 .gain_min = 1 << 4,
+	 .gain_max = 1440 << 4,
+	 .regs = sensor_default_regs,
+	 .regs_size = ARRAY_SIZE(sensor_default_regs),
 	 .set_size = NULL,
 	 },
 };
@@ -490,7 +575,6 @@ static int sensor_probe(struct i2c_client *client,
 	info->fmt_num = N_FMTS;
 	info->win_size_num = N_WIN_SIZES;
 	info->sensor_field = V4L2_FIELD_NONE;
-	info->combo_mode = CMB_TERMINAL_RES | CMB_PHYA_OFFSET3 | MIPI_NORMAL_MODE;
 	info->stream_seq = MIPI_BEFORE_SENSOR;
 	info->af_first_flag = 1;
 	info->exp = 0;

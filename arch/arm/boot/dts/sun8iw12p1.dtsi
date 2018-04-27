@@ -33,6 +33,7 @@
 		twi1 = &twi1;
 		twi2 = &twi2;
 		twi3 = &twi3;
+		twi4 = &twi4;
 		spi0 = &spi0;
 		spi1 = &spi1;
 		spi2 = &spi2;
@@ -630,6 +631,21 @@
 			pinctrl-names = "default", "sleep";
 			pinctrl-0 = <&twi3_pins_a>;
 			pinctrl-1 = <&twi3_pins_b>;
+			status = "disabled";
+		};
+
+		twi4: twi@0x07081800{
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "allwinner,sun8i-twi";
+			device_type = "twi4";
+			reg = <0x0 0x07081800 0x0 0x400>;
+			interrupts = <GIC_SPI 113 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_cpurtwi1>;
+			clock-frequency = <200000>;
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&twi4_pins_a>;
+			pinctrl-1 = <&twi4_pins_b>;
 			status = "disabled";
 		};
 

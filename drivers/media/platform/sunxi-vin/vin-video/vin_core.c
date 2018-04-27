@@ -71,6 +71,7 @@ size_t vi_status_size_sum;
 
 uint isp_reparse_flag;
 uint vin_dump;
+uint ptn_frame_cnt;
 
 #define DEVICE_ATTR_SHOW(name) \
 static ssize_t name##_show(struct device *dev, \
@@ -159,7 +160,7 @@ static struct vin_fmt vin_formats[] = {
 		.color		= V4L2_COLORSPACE_JPEG,
 		.memplanes	= 1,
 		.colplanes	= 3,
-		.flags		= VIN_FMT_YUV,
+		.flags		= VIN_FMT_YUV | VIN_FMT_RAW,
 	}, {
 		.name		= "YUV 4:2:2 planar, Y/CbCr",
 		.fourcc		= V4L2_PIX_FMT_NV16,
@@ -169,11 +170,27 @@ static struct vin_fmt vin_formats[] = {
 		.colplanes	= 2,
 		.flags		= VIN_FMT_YUV | VIN_FMT_RAW,
 	}, {
+		.name		= "YUV 4:2:2 planar, Y/CbCr",
+		.fourcc		= V4L2_PIX_FMT_NV16M,
+		.depth		= { 8, 8 },
+		.color		= V4L2_COLORSPACE_JPEG,
+		.memplanes	= 2,
+		.colplanes	= 2,
+		.flags		= VIN_FMT_YUV | VIN_FMT_RAW,
+	}, {
 		.name		= "YUV 4:2:2 planar, Y/CrCb",
 		.fourcc		= V4L2_PIX_FMT_NV61,
 		.depth		= { 16 },
 		.color		= V4L2_COLORSPACE_JPEG,
 		.memplanes	= 1,
+		.colplanes	= 2,
+		.flags		= VIN_FMT_YUV | VIN_FMT_RAW,
+	}, {
+		.name		= "YUV 4:2:2 planar, Y/CrCb",
+		.fourcc		= V4L2_PIX_FMT_NV61M,
+		.depth		= { 8, 8 },
+		.color		= V4L2_COLORSPACE_JPEG,
+		.memplanes	= 2,
 		.colplanes	= 2,
 		.flags		= VIN_FMT_YUV | VIN_FMT_RAW,
 	}, {
@@ -905,6 +922,7 @@ unlock:
 	struct dma_output_size size;
 	struct csic_dma_flip flip;
 	struct list_head *buf_next = NULL;
+	struct vin_md *vind = dev_get_drvdata(vinc->v4l2_dev->dev);
 
 	if (vin_streaming(cap) == 0) {
 		csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_ALL);
@@ -920,7 +938,7 @@ unlock:
 		if (9 == (vinc->vin_status.frame_cnt % 10))
 			sunxi_isp_dump_regs(vinc->vid_cap.pipe.sd[VIN_IND_ISP]);
 
-	mod_timer(&vinc->timer_for_reset, jiffies + 2*HZ);
+	mod_timer(&vinc->timer_for_reset, jiffies + (2 + vinc->vin_reset_time) * HZ);
 
 	spin_lock_irqsave(&cap->slock, flags);
 
@@ -950,22 +968,18 @@ unlock:
 			csic_dma_disable(vinc->vipp_sel);
 			csic_dma_enable(vinc->vipp_sel);
 		}
-		goto unlock;
 	}
 
 	if (status.fbc_ovhd_wrddr_full) {
 		csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_FBC_OVHD_WRDDR_FULL);
 		/*when open isp debug please ignore fbc error!*/
-		if (!vinc->isp_dbg.debug_en) {
+		if (!vinc->isp_dbg.debug_en)
 			vin_err("video%d fbc overhead write ddr full\n", vinc->id);
-			goto unlock;
-		}
 	}
 
 	if (status.fbc_data_wrddr_full) {
 		csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_FBC_DATA_WRDDR_FULL);
 		vin_err("video%d fbc data write ddr full\n", vinc->id);
-		goto unlock;
 	}
 
 	if (status.vsync_trig) {
@@ -981,15 +995,26 @@ unlock:
 				size.hor_start = 32;
 			csic_dma_output_size_cfg(vinc->vipp_sel, &size);
 		}
-		goto unlock;
-	}
-
-	/*when open isp debug line count interrupt would not come!*/
-	if (status.line_cnt_flag) {
-		csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_LINE_CNT);
 		if (cap->capture_mode != V4L2_MODE_IMAGE) {
-			if (list_empty(&cap->vidq_active) ||
-			    cap->vidq_active.next->next == &cap->vidq_active) {
+			if (cap->first_flag && vinc->large_image != 2) {
+				if ((&cap->vidq_active) == cap->vidq_active.next->next->next) {
+					vin_log(VIN_LOG_VIDEO, "Only two buffer left for video%d\n", vinc->id);
+					vinc->vin_status.lost_cnt++;
+					goto unlock;
+				}
+				if (vinc->vflip_delay == 1) {
+					vinc->vflip_delay--;
+					goto unlock;
+				}
+				buf = list_entry(cap->vidq_active.next, struct vin_buffer, list);
+				buf->vb.sequence = csic_dma_get_frame_cnt(vinc->vipp_sel);
+				buf->vb.framecnt = vinc->vin_status.frame_cnt;
+				buf->vb.exp_time = sensor_get_exp(vinc->vid_cap.pipe.sd[VIN_IND_SENSOR]);
+				v4l2_get_timestamp(&buf->vb.timestamp);
+				list_del(&buf->list);
+				vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
+			}
+			if (list_empty(&cap->vidq_active) || cap->vidq_active.next->next == &cap->vidq_active) {
 				vin_log(VIN_LOG_VIDEO, "No active queue to serve\n");
 				goto unlock;
 			}
@@ -1009,21 +1034,42 @@ unlock:
 				vinc->vflip_delay--;
 			}
 		}
-		goto unlock;
+		if (cap->first_flag == 0) {
+			cap->first_flag++;
+			vin_log(VIN_LOG_VIDEO, "video%d first frame!\n", vinc->id);
+		}
+	}
+
+	/*when open isp debug line count interrupt would not come!*/
+	if (status.line_cnt_flag) {
+		csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_LINE_CNT);
+		vin_log(VIN_LOG_VIDEO, "video%d line_cnt interrupt!\n", vinc->id);
 	}
 
 	if (cap->capture_mode == V4L2_MODE_IMAGE && status.capture_done) {
-		csic_dma_int_disable(vinc->vipp_sel, DMA_INT_CAPTURE_DONE);
+		csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_CAPTURE_DONE);
 		vin_log(VIN_LOG_VIDEO, "capture image mode!\n");
 		buf = list_entry(cap->vidq_active.next, struct vin_buffer, list);
+		v4l2_get_timestamp(&buf->vb.timestamp);
 		list_del(&buf->list);
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
-		goto unlock;
 	} else if (status.frame_done) {
 		int fps = 30;
-		csic_dma_int_disable(vinc->vipp_sel, DMA_INT_FRAME_DONE);
-		if (vinc->ptn_cfg.ptn_en)
-			csic_ptn_generation_en(0, 1);
+		csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_FRAME_DONE);
+		if (vinc->ptn_cfg.ptn_en) {
+			if (vinc->ptn_cfg.ptn_type > 0) {
+				ptn_frame_cnt++;
+				if (ptn_frame_cnt%(vinc->ptn_cfg.ptn_type) == 0) {
+					if (ptn_frame_cnt/(vinc->ptn_cfg.ptn_type) < 3)
+						csic_ptn_addr(vind->id, (unsigned long)(vinc->ptn_cfg.ptn_buf.dma_addr));
+					else
+						csic_ptn_addr(vind->id, (unsigned long)(vinc->ptn_cfg.ptn_buf.dma_addr + (ptn_frame_cnt/vinc->ptn_cfg.ptn_type-2)%3 * vinc->ptn_cfg.ptn_buf.size / 3));
+					csic_ptn_generation_en(0, 1);
+				}
+			} else {
+				csic_ptn_generation_en(0, 1);
+			}
+		}
 
 		vinc->vin_status.buf_rest = 2;
 		buf_next = cap->vidq_active.next->next->next;
@@ -1034,13 +1080,18 @@ unlock:
 				break;
 		}
 
+		if (list_empty(&cap->vidq_active) || cap->vidq_active.next->next == &cap->vidq_active) {
+			vin_log(VIN_LOG_VIDEO, "No active queue to serve\n");
+			goto unlock;
+		}
+
 		/* video buffer handle */
 		if ((&cap->vidq_active) == cap->vidq_active.next->next->next) {
 			vin_log(VIN_LOG_VIDEO, "Only two buffer left for video%d\n", vinc->id);
 			v4l2_get_timestamp(&cap->ts);
-			vinc->vin_status.lost_cnt++;
 			goto unlock;
 		}
+
 		buf = list_entry(cap->vidq_active.next, struct vin_buffer, list);
 
 		/* Nobody is waiting on this buffer */
@@ -1064,23 +1115,12 @@ unlock:
 			}
 		}
 		cap->ts = buf->vb.timestamp;
-		buf->vb.sequence = csic_dma_get_frame_cnt(vinc->vipp_sel);
-		buf->vb.framecnt = vinc->vin_status.frame_cnt;
-		buf->vb.exp_time = sensor_get_exp(vinc->vid_cap.pipe.sd[VIN_IND_SENSOR]);
-
-		if (vinc->vflip_delay == 1) {
-			vinc->vflip_delay--;
-			goto unlock;
-		}
 
 		if (vinc->large_image == 2) {
 			if (vinc->vin_status.frame_cnt % 2 == 0) {
 				list_del(&buf->list);
 				vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
 			}
-		} else {
-			list_del(&buf->list);
-			vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
 		}
 
 		if (cap->osd.overlay_en && !(vinc->vin_status.frame_cnt % (fps / 5))) {
@@ -1101,36 +1141,10 @@ unlock:
 			}
 			vipp_osd_inverse(vinc->vipp_sel, inverse, cap->osd.overlay_cnt);
 		}
-
-		if (cap->first_flag == 0) {
-			cap->first_flag++;
-			vin_log(VIN_LOG_VIDEO, "video%d first frame done!\n", vinc->id);
-		}
-
-		/*when open isp debug buffer addr should update in finish interrupt!*/
-		if (vinc->isp_dbg.debug_en) {
-			if (list_empty(&cap->vidq_active) || cap->vidq_active.next->next == &cap->vidq_active) {
-				vin_log(VIN_LOG_VIDEO, "No active queue to serve\n");
-				goto unlock;
-			}
-			if (vinc->large_image == 1)
-				csic_dma_buffer_address(vinc->vipp_sel, CSI_BUF_0_A, (unsigned long)vinc->ptn_cfg.ptn_buf.dma_addr);
-			else if ((vinc->large_image == 2) && (vinc->vin_status.frame_cnt % 2)) {
-				buf = list_entry(cap->vidq_active.next, struct vin_buffer, list);
-				vin_set_addr(vinc, &buf->vb.vb2_buf, &vinc->vid_cap.frame, &vinc->vid_cap.frame.paddr);
-			} else {
-				buf = list_entry(cap->vidq_active.next->next, struct vin_buffer, list);
-				vin_set_addr(vinc, &buf->vb.vb2_buf, &vinc->vid_cap.frame, &vinc->vid_cap.frame.paddr);
-			}
-		}
 	}
 
 unlock:
 	spin_unlock_irqrestore(&cap->slock, flags);
-
-	csic_dma_int_clear_status(vinc->vipp_sel, DMA_INT_ALL);
-	if (cap->capture_mode != V4L2_MODE_IMAGE)
-		csic_dma_int_enable(vinc->vipp_sel, DMA_INT_ALL);
 
 	return IRQ_HANDLED;
 #endif

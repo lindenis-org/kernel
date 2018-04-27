@@ -448,6 +448,8 @@ static int sunxi_scaler_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		case V4L2_PIX_FMT_YUV422P:
 		case V4L2_PIX_FMT_NV16:
 		case V4L2_PIX_FMT_NV61:
+		case V4L2_PIX_FMT_NV61M:
+		case V4L2_PIX_FMT_NV16M:
 			out_fmt = YUV422;
 			break;
 		default:
@@ -536,34 +538,25 @@ int __scaler_init_subdev(struct scaler_dev *scaler)
 static int scaler_resource_alloc(struct scaler_dev *scaler)
 {
 	int ret = 0;
-	scaler->vipp_reg.size = VIPP_REG_SIZE;
-	scaler->osd_para.size = OSD_PARA_SIZE;
-	scaler->osd_stat.size = OSD_STAT_SIZE;
+	scaler->vipp_reg.size = VIPP_REG_SIZE + OSD_PARA_SIZE + OSD_STAT_SIZE;
 
 	ret = os_mem_alloc(&scaler->pdev->dev, &scaler->vipp_reg);
 	if (ret < 0) {
 		vin_err("scaler regs load addr requset failed!\n");
 		return -ENOMEM;
 	}
-	ret = os_mem_alloc(&scaler->pdev->dev, &scaler->osd_para);
-	if (ret < 0) {
-		vin_err("scaler para load addr requset failed!\n");
-		return -ENOMEM;
-	}
-	ret = os_mem_alloc(&scaler->pdev->dev, &scaler->osd_stat);
-	if (ret < 0) {
-		vin_err("scaler statistic load addr requset failed!\n");
-		return -ENOMEM;
-	}
-	return 0;
 
+	scaler->osd_para.dma_addr = scaler->vipp_reg.dma_addr + VIPP_REG_SIZE;
+	scaler->osd_para.vir_addr = scaler->vipp_reg.vir_addr + VIPP_REG_SIZE;
+	scaler->osd_stat.dma_addr = scaler->osd_para.dma_addr + OSD_PARA_SIZE;
+	scaler->osd_stat.vir_addr = scaler->osd_para.vir_addr + OSD_PARA_SIZE;
+
+	return 0;
 }
 
 static void scaler_resource_free(struct scaler_dev *scaler)
 {
 	os_mem_free(&scaler->pdev->dev, &scaler->vipp_reg);
-	os_mem_free(&scaler->pdev->dev, &scaler->osd_para);
-	os_mem_free(&scaler->pdev->dev, &scaler->osd_stat);
 }
 
 static int scaler_probe(struct platform_device *pdev)

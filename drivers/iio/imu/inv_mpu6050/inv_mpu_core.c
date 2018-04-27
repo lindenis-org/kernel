@@ -860,29 +860,29 @@ static int inv_mpu_probe(struct i2c_client *client,
 	struct inv_mpu6050_state *st;
 	struct iio_dev *indio_dev;
 	struct inv_mpu6050_platform_data *pdata;
+#if defined(CONFIG_OF)
+	struct device_node *np = client->dev.of_node;
+#endif
 #if defined(CONFIG_MPU_ALLWINNER)
 	struct gpio_config int_gpio_config;
-	struct device_node *mpu_node = NULL;
 	int mpu_int_gpio = 0;
 #endif
 	int result;
 
-#if defined(CONFIG_MPU_ALLWINNER)
-	mpu_node = of_find_node_by_name(NULL, "imu_para");
-	if (mpu_node != NULL) {
-		mpu_int_gpio = of_get_named_gpio_flags(mpu_node, "imu-int-gpio", 0,
-				(enum of_gpio_flags *)&int_gpio_config);
+	if (!i2c_check_functionality(client->adapter,
+		I2C_FUNC_SMBUS_I2C_BLOCK))
+		return -ENOSYS;
+
+#if defined(CONFIG_MPU_ALLWINNER) && defined(CONFIG_OF)
+	mpu_int_gpio = of_get_named_gpio_flags(np, "imu-int-gpio", 0,
+			(enum of_gpio_flags *)&int_gpio_config);
+	if (gpio_is_valid(mpu_int_gpio)) {
 		client->irq = gpio_to_irq(mpu_int_gpio);
 		printk("mpu6050: %d:%d\n", mpu_int_gpio, client->irq);
 	} else {
 		inv_irq = -1;
 	}
 #endif
-
-
-	if (!i2c_check_functionality(client->adapter,
-		I2C_FUNC_SMBUS_I2C_BLOCK))
-		return -ENOSYS;
 
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*st));
 	if (!indio_dev)
@@ -894,6 +894,7 @@ static int inv_mpu_probe(struct i2c_client *client,
 	pdata = dev_get_platdata(&client->dev);
 	if (pdata)
 		st->plat_data = *pdata;
+
 	/* power is turned on inside check chip type*/
 	result = inv_check_and_setup_chip(st, id);
 	if (result)
@@ -1030,10 +1031,12 @@ static const unsigned short normal_i2c[2] = {0x68, I2C_CLIENT_END};
 static int inv_mpu_detect(struct i2c_client *client, struct i2c_board_info *info)
 {
 	struct i2c_adapter *adapter = client->adapter;
-	if (adapter->nr == 0) {
-		strlcpy(info->type, "mpu6500", 20);
+        int ret = 0;
+	
+	ret = i2c_smbus_read_byte_data(client, INV_MPU6050_REG_WHO_AM_I);
+	if (ret == INV_MPU6050_CHIP_ID)
 		return 0;
-	}
+
 	dev_err(&client->dev, "failed :select i2c device\n");
 	return -ENODEV;
 }

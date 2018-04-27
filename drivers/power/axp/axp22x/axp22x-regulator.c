@@ -141,9 +141,9 @@ static struct axp_regulator_info axp22x_regulator_info[] = {
 	AXP22X_LDO(11,   700, 3300, 100,  LDO11, 0, 5,  LDO11EN, 0x04, 0x04,
 			0x00,     0,    0,   0,      0, 0, 0, 0, 0),
 	AXP22X_LDO(IO0,  700, 3300, 100, LDOIO0, 0, 5, LDOIO0EN, 0x07, 0x03,
-			0x00,     0,    0,   0,      0, 0, 0, 0, 0),
+			0x04,     0,    0,   0,      0, 0, 0, 0, 0),
 	AXP22X_LDO(IO1,  700, 3300, 100, LDOIO1, 0, 5, LDOIO1EN, 0x07, 0x03,
-			0x00,     0,    0,   0,      0, 0, 0, 0, 0),
+			0x04,     0,    0,   0,      0, 0, 0, 0, 0),
 #ifdef CONFIG_AW_AXP233
 	AXP22X_SW(0,    3300, 3300, 100,  SW0, 0, 0,  SW0EN, 0x40, 0x40,
 			0x00,     0,    0,   0,      0, 0, 0, 0, 0),

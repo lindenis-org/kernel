@@ -56,8 +56,8 @@
 //#define FTS_DBG
 #ifdef FTS_DBG
 #define ENTER printk(KERN_INFO "[FTS_DBG] func: %s  line: %04d\n", __func__, __LINE__);
-#define PRINT_DBG(x...)  printk(KERN_INFO "[FTS_DBG] " x)
-#define PRINT_INFO(x...)  printk(KERN_INFO "[FTS_INFO] " x)
+#define PRINT_DBG(x...)  pr_debug("[FTS_DBG] " x)
+#define PRINT_INFO(x...)  pr_info("[FTS_INFO] " x)
 #define PRINT_WARN(x...)  printk(KERN_INFO "[FTS_WARN] " x)
 #define PRINT_ERR(format,x...)  printk(KERN_ERR "[FTS_ERR] func: %s  line: %04d  info: " format, __func__, __LINE__, ## x)
 #else
@@ -167,6 +167,25 @@ static void fts_virtual_keys_init(void)
 }
 
 #endif
+
+/**
+ * ctp_print_info - sysconfig print function
+ * return value:
+ *
+ */
+static void ctp_print_info(struct ctp_config_info_ft6x *info)
+{
+	PRINT_DBG("info->ctp_used:%d\n", info->ctp_used);
+	PRINT_DBG("info->twi_id:%d\n", info->twi_id);
+	PRINT_DBG("info->screen_max_x:%d\n", info->screen_max_x);
+	PRINT_DBG("info->screen_max_y:%d\n", info->screen_max_y);
+	PRINT_DBG("info->revert_x_flag:%d\n", info->revert_x_flag);
+	PRINT_DBG("info->revert_y_flag:%d\n", info->revert_y_flag);
+	PRINT_DBG("info->exchange_x_y_flag:%d\n", info->exchange_x_y_flag);
+	PRINT_DBG("info->irq_gpio_number:%d\n", info->irq_gpio.gpio);
+	PRINT_DBG("info->wakeup_gpio_number:%d\n", info->wakeup_gpio.gpio);
+}
+
 
 /*******************************************************************************
 * Name: fts_i2c_read
@@ -368,7 +387,17 @@ static int fts_update_data(void)
 			ft_size = 0x09;
 		}
 		if((buf[6*i+3] & 0x40) == 0x0) {
-#if CONFIG_FT6X_MULTITOUCH   //单、多点触摸选择
+			if (exchange_x_y_flag == 1)
+				swap(x, y);
+			if (revert_x_flag == 1)
+				x = screen_max_x - x;
+			if (revert_y_flag == 1)
+				y = screen_max_y - y;
+			if (x > screen_max_x || x < 0 ||
+				y > screen_max_y || y < 0)
+				return -1;
+
+#ifdef CONFIG_FT6X_MULTITOUCH   /* 单、多点触摸选择 */
 		#if MULTI_PROTOCOL_TYPE_B
 			input_mt_slot(data->input_dev, buf[6*i+5]>>4);
 			input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
@@ -385,20 +414,6 @@ static int fts_update_data(void)
 		#endif
 
 #else //单点
-
-		if(1 == exchange_x_y_flag){
-			swap(x, y);
-		}
-		if(1 == revert_x_flag){
-			x = screen_max_x - x;
-		}
-		if(1 == revert_y_flag){
-			y = screen_max_y - y;
-		}
-       if(x > screen_max_x || x<0 ||y>screen_max_y || y<0){
-
-       		return -1;
-       	}
 
 		input_report_abs(data->input_dev, ABS_X, x);
 		input_report_abs(data->input_dev, ABS_Y, y);
@@ -768,6 +783,7 @@ static int ctp_get_sysconfig(struct device_node *np, struct ctp_config_info_ft6x
 		info->screen_max_y = 240;
 		pr_err("failed to get ctp_screen_max_y\n");
 	}
+	ctp_print_info(info);
 
 	return ret;
 }
@@ -881,7 +897,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 #endif
 	fts->input_dev = input_dev;
 
-#if CONFIG_FT6X_MULTITOUCH   //单、多点触摸选择
+#ifdef CONFIG_FT6X_MULTITOUCH   /* 单、多点触摸选择 */
 	__set_bit(ABS_MT_TOUCH_MAJOR, input_dev->absbit);
 	__set_bit(ABS_MT_POSITION_X, input_dev->absbit);
 	__set_bit(ABS_MT_POSITION_Y, input_dev->absbit);
@@ -1147,24 +1163,6 @@ static int ctp_detect(struct i2c_client *client, struct i2c_board_info *info)
 	}else{
 		return -ENODEV;
 	}
-}
-
-/**
- * ctp_print_info - sysconfig print function
- * return value:
- *
- */
-void ctp_print_info(struct ctp_config_info_ft6x info)
-{
-        printk("info.ctp_used:%d\n",info.ctp_used);
-		 printk("info.twi_id:%d\n",info.twi_id);
-		 printk("info.screen_max_x:%d\n",info.screen_max_x);
-		 printk("info.screen_max_y:%d\n",info.screen_max_y);
-		 printk("info.revert_x_flag:%d\n",info.revert_x_flag);
-		 printk("info.revert_y_flag:%d\n",info.revert_y_flag);
-		 printk("info.exchange_x_y_flag:%d\n",info.exchange_x_y_flag);
-		 printk("info.irq_gpio_number:%d\n",info.irq_gpio.gpio);
-		 printk("info.wakeup_gpio_number:%d\n",info.wakeup_gpio.gpio);
 }
 
 /*******************************************************************************

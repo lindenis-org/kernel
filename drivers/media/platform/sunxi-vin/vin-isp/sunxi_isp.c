@@ -149,19 +149,16 @@ static int isp_3d_pingpong_alloc(struct isp_dev *isp)
 {
 	int ret = 0;
 
-	isp->isp_3d_buf.flags[0] = ISP_3D_R;
-	isp->isp_3d_buf.flags[1] = ISP_3D_W;
+	isp->d3d_pingpong[0].size = isp->mf.width * isp->mf.height * 4;
+	isp->d3d_pingpong[1].size = isp->mf.width * isp->mf.height * 4;
 
-	isp->isp_3d_buf.buf[0].size = isp->mf.width * isp->mf.height * 4;
-	isp->isp_3d_buf.buf[1].size = isp->mf.width * isp->mf.height * 4;
-
-	ret = os_mem_alloc(&isp->pdev->dev, &isp->isp_3d_buf.buf[0]);
+	ret = os_mem_alloc(&isp->pdev->dev, &isp->d3d_pingpong[0]);
 	if (ret < 0) {
 		vin_err("isp 3d pingpong buf0 requset add failed!\n");
 		return -ENOMEM;
 	}
 
-	ret = os_mem_alloc(&isp->pdev->dev, &isp->isp_3d_buf.buf[1]);
+	ret = os_mem_alloc(&isp->pdev->dev, &isp->d3d_pingpong[1]);
 	if (ret < 0) {
 		vin_err("isp 3d pingpong buf1 requset add failed!\n");
 		return -ENOMEM;
@@ -171,23 +168,22 @@ static int isp_3d_pingpong_alloc(struct isp_dev *isp)
 }
 static void isp_3d_pingpong_free(struct isp_dev *isp)
 {
-	os_mem_free(&isp->pdev->dev, &isp->isp_3d_buf.buf[0]);
-	os_mem_free(&isp->pdev->dev, &isp->isp_3d_buf.buf[1]);
+	os_mem_free(&isp->pdev->dev, &isp->d3d_pingpong[0]);
+	os_mem_free(&isp->pdev->dev, &isp->d3d_pingpong[1]);
 }
 
-static int isp_3d_pingpong_update(struct isp_dev *isp,
-				struct isp_hw_pingpong *pingpong)
+static int isp_3d_pingpong_update(struct isp_dev *isp)
 {
 	dma_addr_t addr;
-	int tmp = -1;
+	struct vin_mm tmp;
 
-	tmp = pingpong->flags[0];
-	pingpong->flags[0] = pingpong->flags[1];
-	pingpong->flags[1] = tmp;
+	tmp = isp->d3d_pingpong[0];
+	isp->d3d_pingpong[0] = isp->d3d_pingpong[1];
+	isp->d3d_pingpong[1] = tmp;
 
-	addr = (dma_addr_t)pingpong->buf[pingpong->flags[ISP_3D_W]].dma_addr;
+	addr = (dma_addr_t)isp->d3d_pingpong[0].dma_addr;
 	writel(addr >> 2, isp->isp_load.vir_addr + 0xc8);
-	addr = (dma_addr_t)pingpong->buf[pingpong->flags[ISP_3D_R]].dma_addr;
+	addr = (dma_addr_t)isp->d3d_pingpong[1].dma_addr;
 	writel(addr >> 2, isp->isp_load.vir_addr + 0xcc);
 
 	return 0;
@@ -300,6 +296,7 @@ static int sunxi_isp_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 
 	if (enable) {
 		isp->h3a_stat.frame_number = 0;
+		isp->ptn_isp_cnt = 0;
 		if (isp->load_flag)
 			memcpy(isp->isp_load.vir_addr, &isp->load_shadow[0], ISP_LOAD_REG_SIZE);
 #if ISP_STAT_EN
@@ -310,7 +307,7 @@ static int sunxi_isp_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		if (isp->large_image == 0) {
 			if (isp_3d_pingpong_alloc(isp))
 				return -ENOMEM;
-			isp_3d_pingpong_update(isp, &isp->isp_3d_buf);
+			isp_3d_pingpong_update(isp);
 		}
 		if (isp->wdr_mode != ISP_NORMAL_MODE) {
 			if (isp_wdr_pingpong_alloc(isp)) {
@@ -320,7 +317,7 @@ static int sunxi_isp_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 			isp_wdr_pingpong_set(isp);
 			memcpy(wdr_tbl, wdr_dol_tbl, ISP_WDR_GAMMA_FE_MEM_SIZE + ISP_WDR_GAMMA_BE_MEM_SIZE);
 		}
-		bsp_isp_enable(isp->id);
+		bsp_isp_enable(isp->id, 1);
 		bsp_isp_clr_irq_status(isp->id, ISP_IRQ_EN_ALL);
 		bsp_isp_irq_enable(isp->id, FINISH_INT_EN | PARA_LOAD_INT_EN | SRC0_FIFO_INT_EN
 				     | FRAME_ERROR_INT_EN | FRAME_LOST_INT_EN);
@@ -330,7 +327,7 @@ static int sunxi_isp_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 			load_val = load_val | WDR_UPDATE;
 			bsp_isp_module_enable(isp->id, WDR_EN);
 			bsp_isp_set_wdr_mode(isp->id, ISP_DOL_WDR_MODE);
-			bsp_isp_channel_enable(isp->id, 1);
+			bsp_isp_ch_enable(isp->id, ISP_CH1, 1);
 		} else if (isp->wdr_mode == ISP_COMANDING_MODE) {
 			load_val = load_val | WDR_UPDATE;
 			bsp_isp_module_enable(isp->id, WDR_EN);
@@ -346,12 +343,12 @@ static int sunxi_isp_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 
 		bsp_isp_module_enable(isp->id, SRC0_EN);
 		bsp_isp_set_input_fmt(isp->id, isp->isp_fmt->infmt);
-		bsp_isp_set_ob_zone(isp->id, &isp->isp_ob);
+		bsp_isp_set_size(isp->id, &isp->isp_ob);
 		/*sunxi_isp_dump_regs(sd);*/
-		bsp_isp_set_para_ready(isp->id);
-		bsp_isp_set_last_blank_cycle(isp->id, 7);
-		bsp_isp_set_speed_mode(isp->id, 6);
-		bsp_isp_channel_enable(isp->id, 0);
+		bsp_isp_set_para_ready(isp->id, PARA_READY);
+		bsp_isp_set_last_blank_cycle(isp->id, 5);
+		bsp_isp_set_speed_mode(isp->id, 3);
+		bsp_isp_ch_enable(isp->id, ISP_CH0, 1);
 		bsp_isp_capture_start(isp->id);
 	} else {
 #if ISP_STAT_EN
@@ -363,14 +360,14 @@ static int sunxi_isp_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		v4l2_event_queue(isp->subdev.devnode, &event);
 		bsp_isp_capture_stop(isp->id);
 		bsp_isp_module_disable(isp->id, SRC0_EN);
-		bsp_isp_channel_disable(isp->id, 0);
+		bsp_isp_ch_enable(isp->id, ISP_CH0, 0);
 		bsp_isp_irq_disable(isp->id, ISP_IRQ_EN_ALL);
 		bsp_isp_clr_irq_status(isp->id, ISP_IRQ_EN_ALL);
-		bsp_isp_disable(isp->id);
+		bsp_isp_enable(isp->id, 0);
 		if (isp->large_image == 0)
 			isp_3d_pingpong_free(isp);
 		if (isp->wdr_mode != ISP_NORMAL_MODE) {
-			bsp_isp_channel_disable(isp->id, 1);
+			bsp_isp_ch_enable(isp->id, ISP_CH1, 0);
 			isp_wdr_pingpong_free(isp);
 		}
 		isp->f1_after_librun = 0;
@@ -591,15 +588,18 @@ int sunxi_isp_subdev_init(struct v4l2_subdev *sd, u32 val)
 			isp->load_flag = 0;
 			isp->have_init = 1;
 		}
+		isp->h3a_stat.buf[0].empty = 1;
+		isp->h3a_stat.buf[0].dma_addr = isp->isp_stat.dma_addr;
+		isp->h3a_stat.buf[0].virt_addr = isp->isp_stat.vir_addr;
 		bsp_isp_set_statistics_addr(isp->id, (dma_addr_t)isp->isp_stat.dma_addr);
-		bsp_isp_set_dma_load_addr(isp->id, (unsigned long)isp->isp_load.dma_addr);
-		bsp_isp_set_dma_saved_addr(isp->id, (unsigned long)isp->isp_save.dma_addr);
-		bsp_isp_update_lens_gamma_table(isp->id, &isp->isp_tbl);
-		bsp_isp_update_drc_table(isp->id, &isp->isp_tbl);
+		bsp_isp_set_load_addr(isp->id, (unsigned long)isp->isp_load.dma_addr);
+		bsp_isp_set_saved_addr(isp->id, (unsigned long)isp->isp_save.dma_addr);
+		bsp_isp_set_table_addr(isp->id, LENS_GAMMA_TABLE, (unsigned long)(isp->isp_tbl.isp_lsc_tbl_dma_addr));
+		bsp_isp_set_table_addr(isp->id, DRC_TABLE, (unsigned long)(isp->isp_tbl.isp_drc_tbl_dma_addr));
 
 		INIT_WORK(&isp->isp_isr_bh_task, isp_isr_bh_handle);
 
-		bsp_isp_clr_para_ready(isp->id);
+		bsp_isp_set_para_ready(isp->id, PARA_NOT_READY);
 	} else {
 		flush_work(&isp->isp_isr_bh_task);
 	}
@@ -628,7 +628,10 @@ static int __isp_set_table1_map(struct v4l2_subdev *sd, struct isp_table_reg_map
 		vin_err("isp->isp_lut_tbl.vir_addr is NULL!\n");
 		return -ENOMEM;
 	}
-	ret = copy_from_user(isp->isp_lut_tbl.vir_addr, tbl->addr, tbl->size);
+	if (isp->ptn_type)
+		ret = copy_from_user(&isp->load_lut_tbl[0], tbl->addr, tbl->size);
+	else
+		ret = copy_from_user(isp->isp_lut_tbl.vir_addr, tbl->addr, tbl->size);
 	if (ret < 0) {
 		vin_err("copy table mapping1 from usr error!\n");
 		return ret;
@@ -649,7 +652,10 @@ static int __isp_set_table2_map(struct v4l2_subdev *sd, struct isp_table_reg_map
 		vin_err("isp->isp_drc_tbl.vir_addr is NULL!\n");
 		return -ENOMEM;
 	}
-	ret = copy_from_user(isp->isp_drc_tbl.vir_addr, tbl->addr, tbl->size);
+	if (isp->ptn_type)
+		ret = copy_from_user(&isp->load_drc_tbl[0], tbl->addr, tbl->size);
+	else
+		ret = copy_from_user(isp->isp_drc_tbl.vir_addr, tbl->addr, tbl->size);
 	if (ret < 0) {
 		vin_err("copy table mapping2 from usr error!\n");
 		return ret;
@@ -807,7 +813,7 @@ static void __sunxi_isp_reset(struct isp_dev *isp)
 			vipp_top_clk_en(vinc->vipp_sel, 0);
 		}
 	}
-	bsp_isp_disable(isp->id);
+	bsp_isp_enable(isp->id, 0);
 	bsp_isp_capture_stop(isp->id);
 
 	/*****************start*******************/
@@ -827,7 +833,7 @@ static void __sunxi_isp_reset(struct isp_dev *isp)
 		}
 	}
 
-	bsp_isp_enable(isp->id);
+	bsp_isp_enable(isp->id, 1);
 	bsp_isp_capture_start(isp->id);
 
 	csic_prs_enable(vinc->csi_sel);
@@ -994,8 +1000,8 @@ static int sunxi_isp_s_ctrl(struct v4l2_ctrl *ctrl)
 	unsigned long flags;
 	int ret;
 
-	vin_log(VIN_LOG_ISP, "id = %d, val = %d, cur.val = %d\n",
-		  ctrl->id, ctrl->val, ctrl->cur.val);
+	vin_log(VIN_LOG_ISP, "%s, val = %d, cur.val = %d\n",
+		v4l2_ctrl_get_name(ctrl->id), ctrl->val, ctrl->cur.val);
 	spin_lock_irqsave(&isp->slock, flags);
 	ret = __sunxi_isp_ctrl(isp, ctrl);
 	spin_unlock_irqrestore(&isp->slock, flags);
@@ -1003,8 +1009,44 @@ static int sunxi_isp_s_ctrl(struct v4l2_ctrl *ctrl)
 	return ret;
 }
 
+static int sunxi_isp_try_ctrl(struct v4l2_ctrl *ctrl)
+{
+	/*
+	 * to cheat control framework, because of  when ctrl->cur.val == ctrl->val
+	 * s_ctrl would not be called
+	 */
+	if ((ctrl->minimum == 0) && (ctrl->maximum == 1)) {
+		if (ctrl->val)
+			ctrl->cur.val = 0;
+		else
+			ctrl->cur.val = 1;
+	} else {
+		if (ctrl->val == ctrl->maximum)
+			ctrl->cur.val = ctrl->val - 1;
+		else
+			ctrl->cur.val = ctrl->val + 1;
+	}
+
+	/*
+	 * to cheat control framework, because of  when ctrl->flags is
+	 * V4L2_CTRL_FLAG_VOLATILE, s_ctrl would not be called
+	 */
+	switch (ctrl->id) {
+	case V4L2_CID_EXPOSURE:
+	case V4L2_CID_EXPOSURE_ABSOLUTE:
+	case V4L2_CID_GAIN:
+		if (ctrl->val != ctrl->cur.val)
+			ctrl->flags &= ~V4L2_CTRL_FLAG_VOLATILE;
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
 static const struct v4l2_ctrl_ops sunxi_isp_ctrl_ops = {
 	.s_ctrl = sunxi_isp_s_ctrl,
+	.try_ctrl = sunxi_isp_try_ctrl,
 };
 
 static const struct v4l2_ctrl_config ae_win_ctrls[] = {
@@ -1235,13 +1277,9 @@ int __isp_init_subdev(struct isp_dev *isp)
 	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_SATURATION, -256, 512, 1, 0);
 	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_HUE, -180, 180, 1, 0);
 	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_AUTO_WHITE_BALANCE, 0, 1, 1, 1);
-	ctrl = v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_EXPOSURE, 0, 65536 * 16, 1, 0);
-	if (ctrl != NULL)
-		ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE;
-
+	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_EXPOSURE, 1, 65536 * 16, 1, 1);
 	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_AUTOGAIN, 0, 1, 1, 1);
-	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_GAIN,
-			1 * 1600, 256 * 1600, 1, 1 * 1600);
+	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_GAIN, 16, 6000 * 16, 1, 16);
 
 	v4l2_ctrl_new_std_menu(handler, &sunxi_isp_ctrl_ops,
 			       V4L2_CID_POWER_LINE_FREQUENCY,
@@ -1261,7 +1299,7 @@ int __isp_init_subdev(struct isp_dev *isp)
 	v4l2_ctrl_new_std_menu(handler, &sunxi_isp_ctrl_ops, V4L2_CID_EXPOSURE_AUTO,
 			       V4L2_EXPOSURE_APERTURE_PRIORITY, 0,
 			       V4L2_EXPOSURE_AUTO);
-	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_EXPOSURE_ABSOLUTE, 1, 1000000, 1, 1);
+	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_EXPOSURE_ABSOLUTE, 1, 30 * 1000000, 1, 1);
 	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_EXPOSURE_AUTO_PRIORITY, 0, 1, 1, 0);
 	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_FOCUS_ABSOLUTE, 0, 127, 1, 0);
 	v4l2_ctrl_new_std(handler, &sunxi_isp_ctrl_ops, V4L2_CID_FOCUS_RELATIVE, -127, 127, 1, 0);
@@ -1330,84 +1368,45 @@ int __isp_init_subdev(struct isp_dev *isp)
 static int isp_resource_alloc(struct isp_dev *isp)
 {
 	struct isp_table_addr *tbl = &isp->isp_tbl;
-	void *pa, *va, *dma;
+	void *va, *dma;
 	int ret = 0;
 
-	isp->isp_stat.size = ISP_STAT_TOTAL_SIZE;
-	isp->isp_load.size = ISP_LOAD_REG_SIZE;
-	isp->isp_save.size = ISP_SAVED_REG_SIZE;
-
+	isp->isp_stat.size = ISP_STAT_TOTAL_SIZE + ISP_LOAD_REG_SIZE + ISP_SAVED_REG_SIZE
+			+ ISP_TABLE_MAPPING1_SIZE + ISP_TABLE_MAPPING2_SIZE;
 	ret = os_mem_alloc(&isp->pdev->dev, &isp->isp_stat);
 	if (ret < 0) {
 		vin_err("isp statistic buf requset failed!\n");
 		return -ENOMEM;
 	}
+	isp->isp_load.dma_addr = isp->isp_stat.dma_addr + ISP_STAT_TOTAL_SIZE;
+	isp->isp_load.vir_addr = isp->isp_stat.vir_addr + ISP_STAT_TOTAL_SIZE;
+	isp->isp_save.dma_addr = isp->isp_load.dma_addr + ISP_LOAD_REG_SIZE;
+	isp->isp_save.vir_addr = isp->isp_load.vir_addr + ISP_LOAD_REG_SIZE;
+	isp->isp_lut_tbl.dma_addr = isp->isp_save.dma_addr + ISP_SAVED_REG_SIZE;
+	isp->isp_lut_tbl.vir_addr = isp->isp_save.vir_addr + ISP_SAVED_REG_SIZE;
+	isp->isp_drc_tbl.dma_addr = isp->isp_lut_tbl.dma_addr + ISP_TABLE_MAPPING1_SIZE;
+	isp->isp_drc_tbl.vir_addr = isp->isp_lut_tbl.vir_addr + ISP_TABLE_MAPPING1_SIZE;
 
-	ret = os_mem_alloc(&isp->pdev->dev, &isp->isp_load);
-	if (ret < 0) {
-		vin_err("isp load regs requset failed!\n");
-		return -ENOMEM;
-	}
-	ret = os_mem_alloc(&isp->pdev->dev, &isp->isp_save);
-	if (ret < 0) {
-		vin_err("isp save regs requset failed!\n");
-		return -ENOMEM;
-	}
-
-	/*requeset for isp table*/
-	isp->isp_lut_tbl.size = ISP_TABLE_MAPPING1_SIZE;
-	ret = os_mem_alloc(&isp->pdev->dev, &isp->isp_lut_tbl);
-	if (ret < 0) {
-		vin_err("isp lookup table request failed!\n");
-		return -ENOMEM;
-	}
-	pa = isp->isp_lut_tbl.phy_addr;
 	va = isp->isp_lut_tbl.vir_addr;
 	dma = isp->isp_lut_tbl.dma_addr;
-	tbl->isp_lsc_tbl_paddr = (void *)(pa + ISP_LSC_MEM_OFS);
 	tbl->isp_lsc_tbl_dma_addr = (void *)(dma + ISP_LSC_MEM_OFS);
 	tbl->isp_lsc_tbl_vaddr = (void *)(va + ISP_LSC_MEM_OFS);
-	tbl->isp_gamma_tbl_paddr = (void *)(pa + ISP_GAMMA_MEM_OFS);
 	tbl->isp_gamma_tbl_dma_addr = (void *)(dma + ISP_GAMMA_MEM_OFS);
 	tbl->isp_gamma_tbl_vaddr = (void *)(va + ISP_GAMMA_MEM_OFS);
-	tbl->isp_linear_tbl_paddr = (void *)(pa + ISP_LINEAR_MEM_OFS);
 	tbl->isp_linear_tbl_dma_addr = (void *)(dma + ISP_LINEAR_MEM_OFS);
 	tbl->isp_linear_tbl_vaddr = (void *)(va + ISP_LINEAR_MEM_OFS);
 
-	vin_log(VIN_LOG_ISP, "isp_lsc_tbl_vaddr = %p\n",
-		tbl->isp_lsc_tbl_vaddr);
-	vin_log(VIN_LOG_ISP, "isp_gamma_tbl_vaddr = %p\n",
-		tbl->isp_gamma_tbl_vaddr);
-
-	isp->isp_drc_tbl.size = ISP_TABLE_MAPPING2_SIZE;
-	ret = os_mem_alloc(&isp->pdev->dev, &isp->isp_drc_tbl);
-	if (ret < 0) {
-		vin_err("isp drc table request pa failed!\n");
-		return -ENOMEM;
-	}
-	pa = isp->isp_drc_tbl.phy_addr;
 	va = isp->isp_drc_tbl.vir_addr;
 	dma = isp->isp_drc_tbl.dma_addr;
 
-	tbl->isp_drc_tbl_paddr = (void *)(pa + ISP_DRC_MEM_OFS);
 	tbl->isp_drc_tbl_dma_addr = (void *)(dma + ISP_DRC_MEM_OFS);
 	tbl->isp_drc_tbl_vaddr = (void *)(va + ISP_DRC_MEM_OFS);
 
-	vin_log(VIN_LOG_ISP, "isp_drc_tbl_vaddr = %p\n",
-			tbl->isp_drc_tbl_vaddr);
-
 	return ret;
-
 }
 static void isp_resource_free(struct isp_dev *isp)
 {
 	os_mem_free(&isp->pdev->dev, &isp->isp_stat);
-	os_mem_free(&isp->pdev->dev, &isp->isp_load);
-	os_mem_free(&isp->pdev->dev, &isp->isp_save);
-
-	/* release isp table */
-	os_mem_free(&isp->pdev->dev, &isp->isp_lut_tbl);
-	os_mem_free(&isp->pdev->dev, &isp->isp_drc_tbl);
 }
 
 void isp_isr_bh_handle(struct work_struct *work)
@@ -1508,10 +1507,13 @@ static irqreturn_t isp_isr(int irq, void *priv)
 
 	if (bsp_isp_get_irq_status(isp->id, PARA_LOAD_PD)) {
 		bsp_isp_clr_irq_status(isp->id, PARA_LOAD_PD);
-		bsp_isp_clr_para_ready(isp->id);
+		if (isp->ptn_type) {
+			spin_unlock_irqrestore(&isp->slock, flags);
+			return IRQ_HANDLED;
+		}
+		bsp_isp_set_para_ready(isp->id, PARA_NOT_READY);
 		if (isp->load_flag)
 			memcpy(isp->isp_load.vir_addr, &isp->load_shadow[0], ISP_LOAD_REG_SIZE);
-
 		load_val = bsp_isp_load_update_flag(isp->id);
 		if (isp->wdr_mode != ISP_NORMAL_MODE)
 			isp_wdr_pingpong_set(isp);
@@ -1531,10 +1533,10 @@ static irqreturn_t isp_isr(int irq, void *priv)
 				isp->isp_ob.ob_start.hor += isp->isp_ob.ob_valid.width - LARGE_IMAGE_OFF * 2;
 			}
 		}
-		bsp_isp_set_ob_zone(isp->id, &isp->isp_ob);
+		bsp_isp_set_size(isp->id, &isp->isp_ob);
 		bsp_isp_update_table(isp->id, (unsigned short)load_val);
-		isp_3d_pingpong_update(isp, &isp->isp_3d_buf);
-		bsp_isp_set_para_ready(isp->id);
+		isp_3d_pingpong_update(isp);
+		bsp_isp_set_para_ready(isp->id, PARA_READY);
 	}
 	spin_unlock_irqrestore(&isp->slock, flags);
 
@@ -1542,6 +1544,20 @@ static irqreturn_t isp_isr(int irq, void *priv)
 		bsp_isp_clr_irq_status(isp->id, FINISH_PD);
 		vin_log(VIN_LOG_ISP, "call tasklet schedule!\n");
 		schedule_work(&isp->isp_isr_bh_task);
+
+		if (isp->ptn_type) {
+			bsp_isp_set_para_ready(isp->id, PARA_NOT_READY);
+			memcpy(isp->isp_load.vir_addr, &isp->load_shadow[0] + (isp->ptn_isp_cnt%3) * ISP_LOAD_REG_SIZE, ISP_LOAD_REG_SIZE);
+			memcpy(isp->isp_lut_tbl.vir_addr, &isp->load_lut_tbl[0] + (isp->ptn_isp_cnt%3) * ISP_TABLE_MAPPING1_SIZE, ISP_TABLE_MAPPING1_SIZE);
+			memcpy(isp->isp_drc_tbl.vir_addr, &isp->load_drc_tbl[0] + (isp->ptn_isp_cnt%3) * ISP_TABLE_MAPPING2_SIZE, ISP_TABLE_MAPPING2_SIZE);
+			isp->ptn_isp_cnt++;
+			load_val = bsp_isp_load_update_flag(isp->id);
+			bsp_isp_set_size(isp->id, &isp->isp_ob);
+			bsp_isp_update_table(isp->id, (unsigned short)load_val);
+			isp_3d_pingpong_update(isp);
+			bsp_isp_set_para_ready(isp->id, PARA_READY);
+		}
+
 		if (!isp->f1_after_librun) {
 			sunxi_isp_frame_sync_isr(&isp->subdev);
 			if (isp->h3a_stat.stata_en_flag)
@@ -1592,11 +1608,6 @@ static int isp_probe(struct platform_device *pdev)
 	isp->base = of_iomap(np, 0);
 	if (!isp->base) {
 		isp->is_empty = 1;
-		isp->base = kzalloc(0x300, GFP_KERNEL);
-		if (!isp->base) {
-			ret = -EIO;
-			goto freedev;
-		}
 	} else {
 		isp->is_empty = 0;
 		/*get irq resource */
@@ -1611,6 +1622,12 @@ static int isp_probe(struct platform_device *pdev)
 			vin_err("isp%d request irq failed\n", isp->id);
 			goto unmap;
 		}
+		if (isp_resource_alloc(isp) < 0) {
+			ret = -ENOMEM;
+			goto freeirq;
+		}
+		bsp_isp_map_reg_addr(isp->id, (unsigned long)isp->base);
+		bsp_isp_map_load_dram_addr(isp->id, (unsigned long)isp->isp_load.vir_addr);
 	}
 
 	list_add_tail(&isp->isp_list, &isp_drv_list);
@@ -1618,20 +1635,12 @@ static int isp_probe(struct platform_device *pdev)
 
 	spin_lock_init(&isp->slock);
 
-	if (isp_resource_alloc(isp) < 0) {
-		ret = -ENOMEM;
-		goto freeirq;
-	}
-
 	ret = vin_isp_h3a_init(isp);
 	if (ret < 0) {
 		vin_err("VIN H3A initialization failed\n");
 			goto free_res;
 	}
 
-	bsp_isp_init_platform(SUNXI_PLATFORM_ID);
-	bsp_isp_set_base_addr(isp->id, (unsigned long)isp->base);
-	bsp_isp_set_map_load_addr(isp->id, (unsigned long)isp->isp_load.vir_addr);
 	platform_set_drvdata(pdev, isp);
 	vin_log(VIN_LOG_ISP, "isp%d probe end!\n", isp->id);
 	return 0;
@@ -1662,13 +1671,11 @@ static int isp_remove(struct platform_device *pdev)
 	v4l2_ctrl_handler_free(sd->ctrl_handler);
 	v4l2_set_subdevdata(sd, NULL);
 
-	isp_resource_free(isp);
 	if (!isp->is_empty) {
+		isp_resource_free(isp);
 		free_irq(isp->irq, isp);
 		if (isp->base)
 			iounmap(isp->base);
-	} else {
-		kfree(isp->base);
 	}
 	list_del(&isp->isp_list);
 	kfree(isp->stat_buf);
@@ -1696,6 +1703,8 @@ void sunxi_isp_sensor_type(struct v4l2_subdev *sd, int use_isp)
 {
 	struct isp_dev *isp = v4l2_get_subdevdata(sd);
 	isp->use_isp = use_isp;
+	if (isp->is_empty)
+		isp->use_isp = 0;
 }
 
 void sunxi_isp_dump_regs(struct v4l2_subdev *sd)
@@ -1723,6 +1732,12 @@ void sunxi_isp_debug(struct v4l2_subdev *sd, struct isp_debug_mode *isp_debug)
 {
 	struct isp_dev *isp = v4l2_get_subdevdata(sd);
 	isp->isp_dbg = *isp_debug;
+}
+
+void sunxi_isp_ptn(struct v4l2_subdev *sd, unsigned int ptn_type)
+{
+	struct isp_dev *isp = v4l2_get_subdevdata(sd);
+	isp->ptn_type = ptn_type;
 }
 
 struct v4l2_subdev *sunxi_isp_get_subdev(int id)

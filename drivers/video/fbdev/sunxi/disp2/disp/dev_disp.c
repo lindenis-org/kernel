@@ -2504,7 +2504,7 @@ static void __exit disp_module_exit(void)
 	cdev_del(my_cdev);
 }
 
-module_init(disp_module_init);
+device_paralell_initcall(disp_module_init);
 module_exit(disp_module_exit);
 
 MODULE_AUTHOR("tan");

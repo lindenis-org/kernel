@@ -31,7 +31,6 @@
 #include "../modules/actuator/actuator.h"
 #include "../vin-csi/bsp_csi.h"
 #include "../vin-mipi/bsp_mipi_csi.h"
-#include "../vin-isp/bsp_isp.h"
 #include "../utility/vin_supply.h"
 #include "vin_video.h"
 #include "../vin.h"
@@ -73,6 +72,7 @@ struct vin_ptn_cfg {
 	__u32 ptn_h;
 	__u32 ptn_mode;
 	__u32 ptn_dw;
+	__u32 ptn_type;
 	struct vin_mm ptn_buf;
 };
 
@@ -110,6 +110,7 @@ struct vin_core {
 	int irq;
 	struct vin_status_info vin_status;
 	struct timer_list timer_for_reset;
+	unsigned int vin_reset_time;
 	struct vin_ptn_cfg ptn_cfg;
 };
 

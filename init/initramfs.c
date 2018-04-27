@@ -672,4 +672,4 @@ static int __init populate_rootfs(void)
 	}
 	return 0;
 }
-rootfs_initcall(populate_rootfs);
+device_paralell_initcall(populate_rootfs);
