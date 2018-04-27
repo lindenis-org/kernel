@@ -307,6 +307,10 @@ static int __csi_set_fmt_hw(struct csi_dev *csi)
 		csi->out_size.ver_len = csi->out_size.ver_len / 2;
 
 	for (i = 0; i < csi->bus_info.ch_total_num; i++) {
+		if (1 == i)
+		{
+			csi->out_size.ver_start = 8;
+		}
 		csic_prs_input_fmt_cfg(csi->id, i, csi->csi_fmt->infmt);
 		csic_prs_output_size_cfg(csi->id, i, &csi->out_size);
 	}

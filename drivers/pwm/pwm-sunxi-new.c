@@ -1785,15 +1785,6 @@ static int sunxi_pwm_probe(struct platform_device *pdev)
 		goto err_alloc;
 	}
 
-	pwm->config = devm_kzalloc(&pdev->dev,
-			sizeof(*pwm->config) * pwm->chip.npwm, GFP_KERNEL);
-
-	if (!pwm->config) {
-		ret = -ENOMEM;
-		dev_err(&pdev->dev, "failed to allocate memory!\n");
-		goto err_alloc;
-	}
-
 	for (i = 0; i < pwm->chip.npwm; i++) {
 		sub_np = of_parse_phandle(np, "pwms", i);
 		if (IS_ERR_OR_NULL(sub_np)) {

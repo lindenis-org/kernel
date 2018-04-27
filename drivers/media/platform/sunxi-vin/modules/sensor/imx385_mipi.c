@@ -17,7 +17,7 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/videodev2.h>
-#include <linux/clk.h>
+#include <linux/clk.h> 
 #include <media/v4l2-device.h>
 #include <media/v4l2-mediabus.h>
 #include <linux/io.h>
@@ -29,12 +29,16 @@ MODULE_AUTHOR("lwj");
 MODULE_DESCRIPTION("A low-level driver for IMX385 sensors");
 MODULE_LICENSE("GPL");
 
-#define MCLK              37500000	/*(24*1000*1000)*/
+#define MCLK              37125000
 #define V4L2_IDENT_SENSOR  0x0385
 
-#define VMAX 1125	
-#define HMAX 4356		
+#define VMAX 	1125	
+#define HMAX 	4400		
+#define HMAX_50 2200
 
+#define DOL_RHS1	51	//39
+#define DOL_RATIO	16
+#define Y_SIZE		2204
 /*
  * Our nominal (default) frame rate.
  */
@@ -46,9 +50,9 @@ MODULE_LICENSE("GPL");
  */
 #define I2C_ADDR 0x34
 
-#define SENSOR_NUM 0x2
-#define SENSOR_NAME "imx385_mipi"
-#define SENSOR_NAME_2 "imx385_mipi_2"
+#define SENSOR_NUM		0x2
+#define SENSOR_NAME		"imx385_mipi"
+#define SENSOR_NAME_2	"imx385_mipi_2"
 
 /*
  * The default register settings
@@ -60,18 +64,15 @@ static struct regval_list sensor_default_regs[] = {
 
 static struct regval_list sensor_4lane_1080P30_regs[] = {
 	{0x3000, 0x01},
-	
+		
 	{0x3009, 0x02},
 	{0x310B, 0x07},
 	{0x3110, 0x12},
 	{0x3012, 0x2C},
 	{0x3013, 0x01},
-	{0x3018, (VMAX&0xFF)}, // vts lsb
-	{0x3019, ((VMAX>>8)&0xFF)}, // vts msb
-	{0x301c, (HMAX&0xFF)}, // hts lsb
-	{0x301d, ((HMAX>>8)&0xFF)}, // hts msb
+	{0x301B, 0x30},
+	{0x301C, 0x11},
 
-	
 	{0x3338, 0xD4},
 	{0x3339, 0x40},
 	{0x333A, 0x10},
@@ -110,6 +111,59 @@ static struct regval_list sensor_4lane_1080P30_regs[] = {
 
 };
 
+static struct regval_list sensor_4lane_1080P30DOL_regs[] = {
+	{0x3000, 0x01},
+	
+	{0x3007, 0x10},
+	{0x300C, 0x11},
+	{0x3012, 0x2C},
+	{0x3013, 0x01},
+	{0x301B, HMAX_50&0xFF},
+	{0x301C, HMAX_50>>8},
+	{0x3020, 0x03},
+	{0x3023, 0xE9},
+	{0x3024, 0x03},
+	{0x302C, DOL_RHS1},
+	{0x3043, 0x05},
+	{0x3049, 0x0A},
+	{0x3054, 0x66},
+	{0x305D, 0x00},
+	{0x305F, 0x00},
+	
+	{0x3109, 0x01},
+	{0x310B, 0x07},
+	{0x3110, 0x12},
+	{0x31ED, 0x38},
+	
+	{0x3338, 0xD4},
+	{0x3339, 0x40},
+	{0x333A, 0x10},
+	{0x333B, 0x00},
+	{0x333C, 0xD4},
+	{0x333D, 0x40},
+	{0x333E, 0x10},
+	{0x333F, 0x00},
+	{0x3346, 0x03},
+	{0x3353, 0x0E},
+	{0x3354, 0x00},
+	{0x3357, 0xB2},
+	{0x3358, 0x08},
+	{0x337D, 0x0C},
+	{0x337E, 0x0C},
+	{0x3380, 0x20},
+	{0x3381, 0x25},
+	{0x338D, 0xB4},
+	{0x338E, 0x01},
+	
+	{0x3014, 0x58}, //GAIN
+	{0x3015, 0x00},
+	
+	{0x3000, 0x00},
+	{0x3002, 0x00}, //master mode operation start
+
+};
+
+
 
 /*
  * Here we'll try to encapsulate the changes for just the output
@@ -141,17 +195,59 @@ static int imx385_sensor_vts;
 static int sensor_s_exp(struct v4l2_subdev *sd, unsigned int exp_val)
 {
 	data_type explow, expmid, exphigh;
-	unsigned int exptime;
+	int shttime,  exp_val_m, exp_val_s;
 	struct sensor_info *info = to_state(sd);
+	struct sensor_win_size *wsize = info->current_wins;
 
-	exptime = VMAX - (exp_val >> 4) - 1;
-	exphigh = (unsigned char)((0x0030000 & exptime) >> 16);
-	expmid = (unsigned char)((0x000ff00 & exptime) >> 8);
-	explow = (unsigned char)((0x00000ff & exptime));
-	sensor_write(sd, 0x3020, explow);
-	sensor_write(sd, 0x3021, expmid);
-	sensor_write(sd, 0x3022, exphigh);
-	sensor_dbg("sensor_set_exp = %d %d line Done!\n", exp_val, exptime);
+	shttime = wsize->vts - (exp_val >> 4) - 1;
+	if (info->isp_wdr_mode == ISP_DOL_WDR_MODE) 
+	{
+		// LEF
+		shttime = (imx385_sensor_vts<<1) - (exp_val>>4) - 1;
+		if (shttime < DOL_RHS1 + 2)
+		{
+			shttime = DOL_RHS1 + 2;
+			exp_val = ((imx385_sensor_vts<<1) - shttime - 1) << 4;
+		}
+		sensor_dbg("long exp_val: %d, shttime: %d\n", exp_val, shttime);
+		
+		exphigh = (unsigned char) ((0x0030000&shttime)>>16);
+		expmid	= (unsigned char) ((0x000ff00&shttime)>>8 );
+		explow	= (unsigned char) ((0x00000ff&shttime)	  );
+			
+		sensor_write(sd, 0x3023, explow);
+		sensor_write(sd, 0x3024, expmid);
+		sensor_write(sd, 0x3025, exphigh);
+
+		// SEF
+		exp_val_m = exp_val/DOL_RATIO;
+		if (exp_val_m < 2 * 16)
+			exp_val_m = 2 * 16;
+		shttime = DOL_RHS1 - (exp_val_m>>4) - 1;
+		if (shttime < 1)
+			shttime = 1;
+
+		sensor_dbg("short exp_val: %d, shttime: %d\n", exp_val_m, shttime);
+
+		exphigh = (unsigned char) ((0x0030000&shttime)>>16);
+		expmid	= (unsigned char) ((0x000ff00&shttime)>>8 );
+		explow	= (unsigned char) ((0x00000ff&shttime)	  );
+
+		sensor_write(sd, 0x3020, explow);
+		sensor_write(sd, 0x3021, expmid);
+		sensor_write(sd, 0x3022, exphigh);
+	} 
+	else
+	{
+		exphigh = (unsigned char)((0x0030000 & shttime) >> 16);
+		expmid = (unsigned char)((0x000ff00 & shttime) >> 8);
+		explow = (unsigned char)((0x00000ff & shttime));
+		sensor_write(sd, 0x3020, explow);
+		sensor_write(sd, 0x3021, expmid);
+		sensor_write(sd, 0x3022, exphigh);
+	}
+	sensor_dbg("sensor_set_exp = %d %d %d %d Done!\n", imx385_sensor_vts, exp_val, shttime, exp_val_m);
+
 
 	info->exp = exp_val;
 	return 0;
@@ -251,7 +347,7 @@ static int sensor_s_gain(struct v4l2_subdev *sd, int gain_val)
 //	if (0 != (count++))
 		sensor_write(sd, 0x3009, gain_mode);
 //	gain_mode_buf = gain_mode;
-	printk("sensor_set_gain = %d, Done!\n", gain_val);
+	sensor_dbg("sensor_set_gain = %d, Done!\n", gain_val);
 	info->gain = gain_val;
 
 	return 0;
@@ -472,7 +568,7 @@ static struct sensor_format_struct sensor_formats[] = {
  */
 
 static struct sensor_win_size sensor_win_sizes[] = {
-	/* 1080P */
+
 	{
 	 .width = 1936,
 	 .height = 1096,
@@ -480,7 +576,7 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	 .voffset = 0,
 	 .hts = HMAX,
 	 .vts = VMAX,
-	 .pclk = 147 * 1000 * 1000,
+	 .pclk = 148 * 1000 * 1000,
 	 .mipi_bps = 446 * 1000 * 1000,
 	 .fps_fixed = 30,
 	 .bin_factor = 1,
@@ -494,7 +590,28 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	 .regs_size = ARRAY_SIZE(sensor_4lane_1080P30_regs),
 	 .set_size = NULL,
 	 },
-
+ 
+	 {
+	  .width = 1920,
+	  .height = 1080,
+	  .hoffset = 0,
+	  .voffset = 1,
+	  .hts = HMAX_50,
+	  .vts = VMAX,
+	  .pclk = 148 * 1000 * 1000,
+	  .mipi_bps = 446 * 1000 * 1000,
+	  .fps_fixed = 30,
+	  .if_mode = MIPI_DOL_WDR_MODE,
+	  .wdr_mode = ISP_DOL_WDR_MODE,
+	  .bin_factor = 2,
+	  .intg_min = 1 << 4,
+	  .intg_max = (VMAX - 4) << 4,
+	  .gain_min = 1 << 4,
+	  .gain_max = 1440 << 4,
+	  .regs = sensor_4lane_1080P30DOL_regs,
+	  .regs_size = ARRAY_SIZE(sensor_4lane_1080P30DOL_regs),
+	  .set_size = NULL,
+	  },
 };
 
 #define N_WIN_SIZES (ARRAY_SIZE(sensor_win_sizes))
@@ -502,7 +619,12 @@ static struct sensor_win_size sensor_win_sizes[] = {
 static int sensor_g_mbus_config(struct v4l2_subdev *sd,
 				struct v4l2_mbus_config *cfg)
 {
+	struct sensor_info *info = to_state(sd);
+
 	cfg->type = V4L2_MBUS_CSI2;
+	if (info->isp_wdr_mode == ISP_DOL_WDR_MODE)
+		cfg->flags = 0 | V4L2_MBUS_CSI2_4_LANE | V4L2_MBUS_CSI2_CHANNEL_0 | V4L2_MBUS_CSI2_CHANNEL_1;
+	else
 		cfg->flags = 0 | V4L2_MBUS_CSI2_4_LANE | V4L2_MBUS_CSI2_CHANNEL_0;
 
 	return 0;
