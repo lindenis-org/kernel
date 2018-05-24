@@ -569,6 +569,7 @@ static struct sensor_format_struct sensor_formats[] = {
 
 static struct sensor_win_size sensor_win_sizes[] = {
 
+	/*
 	{
 	 .width = 1936,
 	 .height = 1096,
@@ -590,6 +591,7 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	 .regs_size = ARRAY_SIZE(sensor_4lane_1080P30_regs),
 	 .set_size = NULL,
 	 },
+	 */
  
 	 {
 	  .width = 1920,

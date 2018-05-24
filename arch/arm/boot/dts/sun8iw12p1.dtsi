@@ -2031,11 +2031,11 @@
 			device_id = <0>;
 			vind0_clk = <432000000>;
 			reg = <0x0 0x06600000 0x0 0x1000>;
-			clocks = <&clk_csi_top>, <&clk_pll_isp>,
-				 <&clk_csi_master0>, <&clk_hosc>, <&clk_pll_isp>,
-				 <&clk_csi_master1>, <&clk_hosc>, <&clk_pll_isp>,
-				 <&clk_csi_master2>, <&clk_hosc>, <&clk_pll_isp>,
-				 <&clk_csi_master3>, <&clk_hosc>, <&clk_pll_isp>,
+			clocks = <&clk_csi_top>, <&clk_pll_video0>,
+				 <&clk_csi_master0>, <&clk_hosc>, <&clk_pll_video0>,
+				 <&clk_csi_master1>, <&clk_hosc>, <&clk_pll_video0>,
+				 <&clk_csi_master2>, <&clk_hosc>, <&clk_pll_video0>,
+				 <&clk_csi_master3>, <&clk_hosc>, <&clk_pll_video0>,
 				 <&clk_isp>;
 			pinctrl-names = "mclk0-default","mclk0-sleep","mclk1-default","mclk1-sleep",
 					"mclk2-default","mclk2-sleep","mclk3-default","mclk3-sleep";
