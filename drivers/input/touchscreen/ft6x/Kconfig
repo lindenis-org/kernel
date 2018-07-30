@@ -1,0 +1,10 @@
+#
+#  Touchscreen ft6x driver configuration
+#
+
+config TOUCHSCREEN_FT6X_TS
+       tristate  "ft6x touchscreen driver"
+       default m
+       depends on INPUT && I2C
+       help
+         ft6x touchscreen driver
