@@ -96,3 +96,4 @@ obj-$(CONFIG_INPUT_TOUCHSCREEN)		+= gslx680/
 obj-y		+= gt5688/
 obj-y           += s23501t0-g/
 obj-y           += ft6x/
+obj-y           += gt9xx/

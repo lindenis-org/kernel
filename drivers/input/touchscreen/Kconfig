@@ -1117,4 +1117,5 @@ source "drivers/input/touchscreen/gslx680/Kconfig"
 source "drivers/input/touchscreen/gt5688/Kconfig"
 source "drivers/input/touchscreen/s23501t0-g/Kconfig"
 source "drivers/input/touchscreen/ft6x/Kconfig"
+source "drivers/input/touchscreen/gt9xx/Kconfig"
 endif
