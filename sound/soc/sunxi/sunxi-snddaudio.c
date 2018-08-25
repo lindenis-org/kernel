@@ -95,7 +95,7 @@ static int sunxi_snddaudio_hw_params(struct snd_pcm_substream *substream,
 
 	if (ret < 0) {
 		dev_warn(card->dev, "codec dai set fmt failed\n");
-		return ret;
+		//return ret;
 	}
 
 	/* set system clk div */
@@ -107,7 +107,7 @@ static int sunxi_snddaudio_hw_params(struct snd_pcm_substream *substream,
 	ret = snd_soc_dai_set_clkdiv(codec_dai, 0, clk_div);
 	if (ret < 0) {
 		dev_warn(card->dev, "codec_dai set clkdiv failed\n");
-		return ret;
+		//return ret;
 	}
 	return 0;
 }
