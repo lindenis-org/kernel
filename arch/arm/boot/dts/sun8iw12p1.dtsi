@@ -913,6 +913,69 @@
 			status = "disabled";
 		};
 
+		sdc2: sdmmc@04022000 {
+			compatible = "allwinner,sunxi-mmc-v4p5x";
+			device_type = "sdc2";
+			reg = <0x0 0x04022000 0x0 0x1000>;
+			interrupts = <GIC_SPI 48 0x0104>;
+			clocks = <&clk_hosc>,
+				 <&clk_pll_periph0x2>,
+				 <&clk_sdmmc2_mod>,
+				 <&clk_sdmmc2_bus>,
+				 <&clk_sdmmc2_rst>;
+			clock-names = "osc24m","pll_periph","mmc","ahb","rst";
+			pinctrl-names = "default","sleep";
+			pinctrl-0 = <&sdc2_pins_a>;
+			pinctrl-1 = <&sdc2_pins_b>;
+			bus-width = <8>;
+			/*mmc-ddr-1_8v;*/
+			/*mmc-hs200-1_8v;*/
+			/*mmc-hs400-1_8v;*/
+			cap-sd-highspeed;
+			cap-mmc-highspeed;
+			cap-wait-while-busy;
+			mmc-high-capacity-erase-size;
+			cap-erase;
+			/*non-removable;*/
+			/*max-frequency = <200000000>;*/
+			max-frequency = <50000000>;
+
+			/*-- speed mode --*/
+			/*sm0: DS26_SDR12*/
+			/*sm1: HSSDR52_SDR25*/
+			/*sm2: HSDDR52_DDR50*/
+			/*sm3: HS200_SDR104*/
+			/*sm4: HS400*/
+			/*-- frequency point --*/
+			/*f0: CLK_400K*/
+			/*f1: CLK_25M*/
+			/*f2: CLK_50M*/
+			/*f3: CLK_100M*/
+			/*f4: CLK_150M*/
+			/*f5: CLK_200M*/
+
+			sdc_tm4_sm0_freq0 = <0>;
+			sdc_tm4_sm0_freq1 = <0>;
+			sdc_tm4_sm1_freq0 = <0x00000000>;
+			sdc_tm4_sm1_freq1 = <0>;
+			sdc_tm4_sm2_freq0 = <0x00000000>;
+			sdc_tm4_sm2_freq1 = <0>;
+			sdc_tm4_sm3_freq0 = <0x05000000>;
+			sdc_tm4_sm3_freq1 = <0x00000005>;
+			sdc_tm4_sm4_freq0 = <0x00050000>;
+			sdc_tm4_sm4_freq1 = <0x00000004>;
+
+			/*vmmc-supply = <&reg_3p3v>;*/
+			/*vqmc-supply = <&reg_3p3v>;*/
+			/*vdmc-supply = <&reg_3p3v>;*/
+			/*vmmc = "vcc-card";*/
+			/*vqmc = "";*/
+			/*vdmc = "";*/
+			/*sunxi-power-save-mode;*/
+			/*status = "disabled";*/
+			status = "okay";
+		};
+
 		sdc0: sdmmc@04020000 {
 			compatible = "allwinner,sunxi-mmc-v4p1x";
 			device_type = "sdc0";
@@ -1008,69 +1071,6 @@
 			/*sunxi-dly-208M-ddr  = <1 0 0 0 0>;*/
 
 			status = "disabled";
-		};
-
-		sdc2: sdmmc@04022000 {
-			compatible = "allwinner,sunxi-mmc-v4p5x";
-			device_type = "sdc2";
-			reg = <0x0 0x04022000 0x0 0x1000>;
-			interrupts = <GIC_SPI 48 0x0104>;
-			clocks = <&clk_hosc>,
-				 <&clk_pll_periph0x2>,
-				 <&clk_sdmmc2_mod>,
-				 <&clk_sdmmc2_bus>,
-				 <&clk_sdmmc2_rst>;
-			clock-names = "osc24m","pll_periph","mmc","ahb","rst";
-			pinctrl-names = "default","sleep";
-			pinctrl-0 = <&sdc2_pins_a>;
-			pinctrl-1 = <&sdc2_pins_b>;
-			bus-width = <8>;
-			/*mmc-ddr-1_8v;*/
-			/*mmc-hs200-1_8v;*/
-			/*mmc-hs400-1_8v;*/
-			cap-sd-highspeed;
-			cap-mmc-highspeed;
-			cap-wait-while-busy;
-			mmc-high-capacity-erase-size;
-			cap-erase;
-			/*non-removable;*/
-			/*max-frequency = <200000000>;*/
-			max-frequency = <50000000>;
-
-			/*-- speed mode --*/
-			/*sm0: DS26_SDR12*/
-			/*sm1: HSSDR52_SDR25*/
-			/*sm2: HSDDR52_DDR50*/
-			/*sm3: HS200_SDR104*/
-			/*sm4: HS400*/
-			/*-- frequency point --*/
-			/*f0: CLK_400K*/
-			/*f1: CLK_25M*/
-			/*f2: CLK_50M*/
-			/*f3: CLK_100M*/
-			/*f4: CLK_150M*/
-			/*f5: CLK_200M*/
-
-			sdc_tm4_sm0_freq0 = <0>;
-			sdc_tm4_sm0_freq1 = <0>;
-			sdc_tm4_sm1_freq0 = <0x00000000>;
-			sdc_tm4_sm1_freq1 = <0>;
-			sdc_tm4_sm2_freq0 = <0x00000000>;
-			sdc_tm4_sm2_freq1 = <0>;
-			sdc_tm4_sm3_freq0 = <0x05000000>;
-			sdc_tm4_sm3_freq1 = <0x00000005>;
-			sdc_tm4_sm4_freq0 = <0x00050000>;
-			sdc_tm4_sm4_freq1 = <0x00000004>;
-
-			/*vmmc-supply = <&reg_3p3v>;*/
-			/*vqmc-supply = <&reg_3p3v>;*/
-			/*vdmc-supply = <&reg_3p3v>;*/
-			/*vmmc = "vcc-card";*/
-			/*vqmc = "";*/
-			/*vdmc = "";*/
-			/*sunxi-power-save-mode;*/
-			/*status = "disabled";*/
-			status = "okay";
 		};
 
 		disp: disp@01000000 {
