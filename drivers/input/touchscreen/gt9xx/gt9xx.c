@@ -86,7 +86,7 @@ static int exchange_x_y_flag = 0;
 static __u32 twi_id = 0;
 static char irq_pin_name[8];
 
-static u32 debug_mask = 255;
+static u32 debug_mask = 0;
 
 enum{	
 	DEBUG_INIT = 1U << 0,	
@@ -429,9 +429,9 @@ static void gtp_touch_down(struct goodix_ts_data* ts,s32 id,s32 x,s32 y,s32 w)
 	//GTP_ERROR("source data:ID:%d, X:%d, Y:%d, W:%d\n", id, x, y, w);
    //printk("=================gtp_touch_down-- joey_parking = %d\n",	joey_parking);
         
-	//if(1 == exchange_x_y_flag){
-	//	swap(x, y);
-	//}
+	if(1 == exchange_x_y_flag){
+		swap(x, y);
+	}
 	
 	if(1 == revert_x_flag){
 		x = SCREEN_MAX_X - x;
@@ -439,10 +439,6 @@ static void gtp_touch_down(struct goodix_ts_data* ts,s32 id,s32 x,s32 y,s32 w)
 	
 	if(1 == revert_y_flag){
 		y = SCREEN_MAX_Y - y;
-	}
-
-	if(1 == exchange_x_y_flag){
-		swap(x, y);
 	}
 	
 	dprintk(DEBUG_X_Y_INFO,"report data:ID:%d, X:%d, Y:%d, W:%d\n", id, x, y, w);
@@ -1430,11 +1426,6 @@ static int ctp_get_system_config(void)
 	revert_x_flag = config_info.revert_x_flag;
 	revert_y_flag = config_info.revert_y_flag;
 	exchange_x_y_flag = config_info.exchange_x_y_flag;
-	//screen_max_x = 1280;
-	//screen_max_y = 720;
-	//revert_x_flag = 1;
-	//revert_y_flag = 1;
-	//exchange_x_y_flag = 0; 
 
 	//printk("===========screen_max_x = %d\n",screen_max_x);
 	//printk("===========screen_max_y = %d\n",screen_max_y);
