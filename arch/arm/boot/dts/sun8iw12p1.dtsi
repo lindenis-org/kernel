@@ -4,6 +4,9 @@
  * modify base on juno.dts
  */
 
+/* nobody use, just to "avoid"(not reslove) OOM problem at the begining of the physical memory address. */
+/memreserve/ 0x40000000 0x00001000; /* reserve for out of memory access problem: size = 4K */
+
 /* kernel used */
 /memreserve/ 0x40020000 0x00000800; /* super standby range        : [0x40020000~0x41020800], size = 2K  */
 
