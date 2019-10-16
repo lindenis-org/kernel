@@ -521,7 +521,7 @@ static int axp22x_charger_init(struct axp_dev *axp_dev)
 	axp_regmap_read(map, AXP22X_BATCAP0, &val);
 	if ((axp22x_config.pmu_battery_cap) && (!(val & 0x80))) {
 		cur_coulomb_counter = axp22x_config.pmu_battery_cap
-					* 1000 / 1456;
+					* 1456 / 1000;
 		axp_regmap_write(map, AXP22X_BATCAP0,
 					((cur_coulomb_counter >> 8) | 0x80));
 		axp_regmap_write(map, AXP22X_BATCAP1,
